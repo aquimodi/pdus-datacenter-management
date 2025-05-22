@@ -19,35 +19,30 @@ export const setupLogger = () => {
     if (Object.keys(metadata).length > 0) {
       // Safely stringify metadata with circular reference handling
       try {
-        const getCircularReplacer = () => {
-          const seen = new WeakSet();
-          return (key, value) => {
-            // Skip problematic keys that often contain circular references
-            if (key === 'socket' || key === '_handle' || key === '_events' || key === '_eventsCount') {
-              return '[skipped]';
+        const seen = new WeakSet();
+        return JSON.stringify(metadata, (key, value) => {
+          // Skip problematic keys that often contain circular references
+          if (key === 'socket' || key === '_handle' || key === '_events' || key === '_eventsCount') {
+            return '[skipped]';
+          }
+          
+          // Handle circular references and function objects
+          if (typeof value === 'object' && value !== null) {
+            if (seen.has(value)) {
+              return '[Circular]';
             }
-            
-            // Handle circular references and function objects
-            if (typeof value === 'object' && value !== null) {
-              if (seen.has(value)) {
-                return '[Circular]';
-              }
-              seen.add(value);
-            }
-            if (typeof value === 'function') {
-              return '[Function]';
-            }
-            // Limit string length to avoid memory issues
-            if (typeof value === 'string' && value.length > 1000) {
-              return value.substring(0, 1000) + '... [truncated]';
-            }
-            return value;
-          };
-        };
-        
-        metaStr = JSON.stringify(metadata, getCircularReplacer(), 2);
+            seen.add(value);
+          }
+          if (typeof value === 'function') {
+            return '[Function]';
+          }
+          if (typeof value === 'string' && value.length > 1000) {
+            return value.substring(0, 1000) + '... [truncated]';
+          }
+          return value;
+        });
       } catch (error) {
-        metaStr = `[Error serializing metadata: ${error.message}]`;
+        metaStr = `[Error during JSON stringify: ${error.message}]`;
       }
     }
     
@@ -153,6 +148,18 @@ export const setupLogger = () => {
           }),
           detailedFormat
         )
+      }),
+      // Monitoring log file - new file dedicated to monitoring activities
+      new winston.transports.File({
+        filename: join(logDir, 'monitoring.log'),
+        maxsize: 2 * 1024 * 1024, // 2MB
+        maxFiles: 3,
+        format: winston.format.combine(
+          winston.format.timestamp({
+            format: 'YYYY-MM-DD HH:mm:ss.SSS'
+          }),
+          detailedFormat
+        )
       })
     ]
   });
@@ -238,7 +245,7 @@ export const setupLogger = () => {
 
   logger.requestEnd = (req, res, time) => {
     try {
-      logger.info(`Request completed: ${req.method} ${req.originalUrl} ${res.statusCode} - ${time}ms`, {
+      logger.info(`Request completed: ${req.method} ${req.originalUrl} ${res.statusCode} (${time}ms)`, {
         type: 'request_end',
         method: req.method,
         url: req.originalUrl,
@@ -247,6 +254,18 @@ export const setupLogger = () => {
       });
     } catch (error) {
       console.error(`Error in requestEnd logger: ${error.message}`);
+    }
+  };
+
+  // New method for monitoring logs
+  logger.monitoring = (message, data) => {
+    try {
+      logger.info(message, {
+        type: 'monitoring',
+        ...(data || {})
+      });
+    } catch (error) {
+      console.error(`Error in monitoring logger: ${error.message}`);
     }
   };
 
@@ -262,6 +281,7 @@ export const createClientLogger = () => {
     error: (message, ...args) => console.error(`[ERROR] ${message}`, ...args),
     apiCall: (message, data) => console.info(`[API_CALL] ${message}`, data),
     apiResponse: (message, data) => console.info(`[API_RESPONSE] ${message}`, data),
-    apiError: (message, error) => console.error(`[API_ERROR] ${message}`, error)
+    apiError: (message, error) => console.error(`[API_ERROR] ${message}`, error),
+    monitoring: (message, data) => console.info(`[MONITORING] ${message}`, data)
   };
 };

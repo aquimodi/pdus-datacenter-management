@@ -320,9 +320,15 @@ async function storeRackData(rackData, cycleId) {
               maintenance = @param3,
               max_power = @param4,
               phase = @param5,
+              free_units = @param6,
               updated_at = GETDATE()
-            WHERE id = @param6
+            WHERE id = @param7
           `;
+          
+          // FIX: Correctly preserve the FREEU value during updates
+          const freeUnits = rack.FREEU || rack.free_units || '0';
+          
+          logger.debug(`Updating rack ${rack.NAME || rack.name} with free_units = ${freeUnits} [${cycleId}]`);
           
           await executeQuery(updateQuery, [
             rack.SITE || rack.site,
@@ -330,6 +336,7 @@ async function storeRackData(rackData, cycleId) {
             rack.MAINTENANCE === '1' || rack.maintenance === 1 || rack.MAINTENANCE === true || rack.maintenance === true ? 1 : 0,
             rack.MAXPOWER || rack.max_power || rack.capacityKw || '7',
             rack.phase || ((rack.L2_VOLTS === null && rack.L3_VOLTS === null) ? 'Single Phase' : '3-Phase'),
+            freeUnits,
             existingRacks[0].id
           ], {
             queryId: `updateRack_${Date.now()}`,
@@ -350,14 +357,20 @@ async function storeRackData(rackData, cycleId) {
             )
           `;
           
+          // FIX: Correctly handle the FREEU value for new inserts too
+          const freeUnits = rack.FREEU || rack.free_units || '10'; // Default to 10 if not specified
+          const maxUnits = rack.MAXU || rack.max_units || '42'; // Default to 42 if not specified
+          
+          logger.debug(`Inserting new rack ${rack.NAME || rack.name} with free_units = ${freeUnits} and max_units = ${maxUnits} [${cycleId}]`);
+          
           await executeQuery(insertQuery, [
             rack.NAME || rack.name,
             rack.SITE || rack.site,
             rack.DC || rack.datacenter || rack.dc,
             rack.MAINTENANCE === '1' || rack.maintenance === 1 || rack.MAINTENANCE === true || rack.maintenance === true ? 1 : 0,
             rack.MAXPOWER || rack.max_power || rack.capacityKw || '7',
-            rack.MAXU || rack.max_units || '42',
-            rack.FREEU || rack.free_units || '10',
+            maxUnits,
+            freeUnits,
             rack.phase || ((rack.L2_VOLTS === null && rack.L3_VOLTS === null) ? 'Single Phase' : '3-Phase')
           ], {
             queryId: `insertRack_${Date.now()}`,
@@ -553,6 +566,9 @@ async function checkThresholdViolations(sensorData, rackData, thresholds, cycleI
         if (sensor.TEMPERATURE || sensor.temperature) {
           const temperature = parseFloat(sensor.TEMPERATURE || sensor.temperature);
           
+          // Log the temperature value and thresholds for debugging
+          logger.debug(`Checking temperature for rack ${rackName}: ${temperature}°C, thresholds: min=${thresholds.min_temp}°C, max=${thresholds.max_temp}°C [${cycleId}]`);
+          
           // Check for high temperature
           if (temperature > thresholds.max_temp) {
             const problemKey = `${rackId}-Temperature-high`;
@@ -597,12 +613,19 @@ async function checkThresholdViolations(sensorData, rackData, thresholds, cycleI
             } else {
               logger.debug(`Skipping duplicate low temperature problem for rack ${rackName} [${cycleId}]`);
             }
+          } else {
+            logger.debug(`Temperature for rack ${rackName} is within normal range: ${temperature}°C [${cycleId}]`);
           }
+        } else {
+          logger.debug(`No temperature data available for rack ${rackName} [${cycleId}]`);
         }
         
         // Check humidity against thresholds
         if (sensor.HUMIDITY || sensor.humidity) {
           const humidity = parseFloat(sensor.HUMIDITY || sensor.humidity);
+          
+          // Log the humidity value and thresholds for debugging
+          logger.debug(`Checking humidity for rack ${rackName}: ${humidity}%, thresholds: min=${thresholds.min_humidity}%, max=${thresholds.max_humidity}% [${cycleId}]`);
           
           // Check for high humidity
           if (humidity > thresholds.max_humidity) {
@@ -648,7 +671,11 @@ async function checkThresholdViolations(sensorData, rackData, thresholds, cycleI
             } else {
               logger.debug(`Skipping duplicate low humidity problem for rack ${rackName} [${cycleId}]`);
             }
+          } else {
+            logger.debug(`Humidity for rack ${rackName} is within normal range: ${humidity}% [${cycleId}]`);
           }
+        } else {
+          logger.debug(`No humidity data available for rack ${rackName} [${cycleId}]`);
         }
         
         // Check power against thresholds
@@ -658,6 +685,9 @@ async function checkThresholdViolations(sensorData, rackData, thresholds, cycleI
           const threshold = isSinglePhase ? 
                           thresholds.max_power_single_phase : 
                           thresholds.max_power_three_phase;
+          
+          // Log the power value and threshold for debugging
+          logger.debug(`Checking power for rack ${rackName}: ${current}A, threshold: ${threshold}A (${isSinglePhase ? 'Single Phase' : '3-Phase'}) [${cycleId}]`);
           
           if (current > threshold) {
             const problemKey = `${rackId}-Power-high`;
@@ -679,7 +709,11 @@ async function checkThresholdViolations(sensorData, rackData, thresholds, cycleI
             } else {
               logger.debug(`Skipping duplicate high power problem for rack ${rackName} [${cycleId}]`);
             }
+          } else {
+            logger.debug(`Power for rack ${rackName} is within normal range: ${current}A [${cycleId}]`);
           }
+        } else {
+          logger.debug(`No power data available for rack ${rackName} [${cycleId}]`);
         }
         
       } catch (checkError) {
@@ -748,6 +782,8 @@ async function createProblem(rackId, type, value, threshold, alertType, cycleId)
       AND status = 'active'
     `;
     
+    logger.debug(`Checking for existing ${type} problem (${alertType}) for rack ID ${rackId} [${cycleId}]`);
+    
     const checkResult = await executeQuery(checkQuery, [rackId, type, alertType], {
       queryId: `checkProblem_${Date.now()}`,
       label: 'Check Existing Problem'
@@ -759,6 +795,9 @@ async function createProblem(rackId, type, value, threshold, alertType, cycleId)
       return;
     }
     
+    // Generate a unique problem ID
+    const problemId = uuidv4();
+    
     // Create new problem
     const query = `
       INSERT INTO problems (
@@ -769,7 +808,7 @@ async function createProblem(rackId, type, value, threshold, alertType, cycleId)
       )
     `;
     
-    const problemId = uuidv4();
+    logger.debug(`Creating new problem: ID=${problemId}, RackID=${rackId}, Type=${type}, Value=${value}, Threshold=${threshold}, AlertType=${alertType} [${cycleId}]`);
     
     await executeQuery(query, [
       problemId,
@@ -783,7 +822,22 @@ async function createProblem(rackId, type, value, threshold, alertType, cycleId)
       label: 'Create Problem'
     });
     
-    logger.info(`Created new problem ${problemId}: ${type} alert (${alertType}) for rack ID ${rackId} with value ${value} vs threshold ${threshold} [${cycleId}]`);
+    // Fetch rack name for better logging
+    let rackName = "Unknown Rack";
+    try {
+      const rackQuery = `SELECT name FROM racks WHERE id = @param0`;
+      const rackResult = await executeQuery(rackQuery, [rackId], {
+        queryId: `getRackName_${Date.now()}`,
+        label: 'Get Rack Name'
+      });
+      if (rackResult && rackResult.length > 0) {
+        rackName = rackResult[0].name;
+      }
+    } catch (error) {
+      logger.warn(`Could not fetch rack name for better logging: ${error.message} [${cycleId}]`);
+    }
+    
+    logger.info(`Created new problem ${problemId}: ${type} alert (${alertType}) for rack ID ${rackId} (${rackName}) with value ${value} vs threshold ${threshold} [${cycleId}]`);
     return problemId;
   } catch (error) {
     logger.error(`Error creating problem: ${error.message} [${cycleId}]`, {
