@@ -1,0 +1,56 @@
+{
+  "landing": {
+    "hero": {
+      "title": "Intelligentes Rechenzentrum",
+      "subtitle": "Betriebsmanagement",
+      "description": "Überwachen, verwalten und optimieren Sie Ihren Rechenzentrumsbetrieb in Echtzeit. Erhalten Sie sofortige Warnungen, detaillierte Analysen und vollständige Kontrolle über Ihre Infrastruktur.",
+      "cta": "Loslegen",
+      "contact": "Vertrieb kontaktieren"
+    },
+    "features": {
+      "title": "Funktionen",
+      "subtitle": "Alles, was Sie für die Verwaltung Ihres Rechenzentrums benötigen",
+      "monitoring": {
+        "title": "Echtzeit-Überwachung",
+        "description": "Überwachen Sie Temperatur, Luftfeuchtigkeit und Stromverbrauch in Echtzeit. Erhalten Sie sofortige Warnungen, wenn Parameter Schwellenwerte überschreiten."
+      },
+      "power": {
+        "title": "Energiemanagement",
+        "description": "Verfolgen Sie den Stromverbrauch, verwalten Sie die Lastverteilung und optimieren Sie die Energienutzung in Ihrer gesamten Infrastruktur."
+      },
+      "analytics": {
+        "title": "Erweiterte Analysen",
+        "description": "Erhalten Sie detaillierte Einblicke in Ihren Rechenzentrumsbetrieb mit umfassenden Analysen und anpassbaren Berichten."
+      },
+      "rack": {
+        "title": "Rack-Management",
+        "description": "Verwalten Sie Ihre Rack-Infrastruktur effizient mit detaillierten Ansichten von Kapazität, Nutzung und Umgebungsbedingungen."
+      }
+    },
+    "stats": {
+      "title": "Vertraut von Rechenzentrumsbetreibern weltweit",
+      "subtitle": "Liefert Zuverlässigkeit, Sicherheit und Effizienz für Ihren Betrieb",
+      "uptime": "Verfügbarkeit",
+      "savings": "Kosteneinsparungen",
+      "response": "Reaktionszeit"
+    },
+    "integrations": {
+      "title": "Leistungsstarke Integrationen",
+      "subtitle": "Verbinden Sie sich mit Ihren bevorzugten Tools",
+      "list": [
+        "Bestehende DCIM-Systeme",
+        "Überwachungsplattformen",
+        "BMS-Systeme",
+        "Asset-Management-Tools",
+        "ERP-Systeme",
+        "IoT-Plattformen"
+      ]
+    },
+    "cta": {
+      "title": "Bereit loszulegen?",
+      "subtitle": "Starten Sie heute Ihre kostenlose Testversion",
+      "description": "Erleben Sie die Leistungsfähigkeit des intelligenten Rechenzentrummanagements",
+      "button": "Jetzt registrieren"
+    }
+  }
+}

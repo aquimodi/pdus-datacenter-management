@@ -1,0 +1,56 @@
+{
+  "landing": {
+    "hero": {
+      "title": "Gestão Inteligente de",
+      "subtitle": "Centros de Dados",
+      "description": "Monitorize, gira e otimize as suas operações de centro de dados em tempo real. Obtenha alertas instantâneos, análises detalhadas e controlo total sobre a sua infraestrutura.",
+      "cta": "Começar",
+      "contact": "Contactar Vendas"
+    },
+    "features": {
+      "title": "Funcionalidades",
+      "subtitle": "Tudo o que precisa para gerir o seu centro de dados",
+      "monitoring": {
+        "title": "Monitorização em Tempo Real",
+        "description": "Monitorize temperatura, humidade e consumo de energia em tempo real. Receba alertas instantâneos quando os parâmetros excederem os limites."
+      },
+      "power": {
+        "title": "Gestão de Energia",
+        "description": "Acompanhe o consumo de energia, gira a distribuição de carga e otimize o uso de energia em toda a sua infraestrutura."
+      },
+      "analytics": {
+        "title": "Análises Avançadas",
+        "description": "Obtenha informações detalhadas sobre as suas operações com análises abrangentes e relatórios personalizáveis."
+      },
+      "rack": {
+        "title": "Gestão de Racks",
+        "description": "Gira eficientemente a sua infraestrutura de racks com vistas detalhadas de capacidade, utilização e condições ambientais."
+      }
+    },
+    "stats": {
+      "title": "Confiado por operadores de centros de dados em todo o mundo",
+      "subtitle": "Entregando fiabilidade, segurança e eficiência às suas operações",
+      "uptime": "Tempo de Atividade",
+      "savings": "Poupança de Custos",
+      "response": "Tempo de Resposta"
+    },
+    "integrations": {
+      "title": "Integrações Poderosas",
+      "subtitle": "Ligue-se às suas ferramentas favoritas",
+      "list": [
+        "Sistemas DCIM existentes",
+        "Plataformas de monitorização",
+        "Sistemas BMS",
+        "Ferramentas de gestão de ativos",
+        "Sistemas ERP",
+        "Plataformas IoT"
+      ]
+    },
+    "cta": {
+      "title": "Pronto para começar?",
+      "subtitle": "Comece o seu teste gratuito hoje",
+      "description": "Experimente o poder da gestão inteligente de centros de dados",
+      "button": "Registar-se agora"
+    }
+  }
+}

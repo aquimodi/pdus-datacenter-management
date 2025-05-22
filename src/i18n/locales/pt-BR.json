@@ -1,0 +1,56 @@
+{
+  "landing": {
+    "hero": {
+      "title": "Gerenciamento Inteligente",
+      "subtitle": "de Data Centers",
+      "description": "Monitore, gerencie e otimize suas operações de data center em tempo real. Obtenha alertas instantâneos, análises detalhadas e controle total sobre sua infraestrutura.",
+      "cta": "Começar",
+      "contact": "Contatar Vendas"
+    },
+    "features": {
+      "title": "Recursos",
+      "subtitle": "Tudo que você precisa para gerenciar seu data center",
+      "monitoring": {
+        "title": "Monitoramento em Tempo Real",
+        "description": "Monitore temperatura, umidade e consumo de energia em tempo real. Receba alertas instantâneos quando os parâmetros excederem os limites."
+      },
+      "power": {
+        "title": "Gestão de Energia",
+        "description": "Acompanhe o consumo de energia, gerencie a distribuição de carga e otimize o uso de energia em toda sua infraestrutura."
+      },
+      "analytics": {
+        "title": "Análises Avançadas",
+        "description": "Obtenha insights detalhados sobre suas operações com análises abrangentes e relatórios personalizáveis."
+      },
+      "rack": {
+        "title": "Gestão de Racks",
+        "description": "Gerencie eficientemente sua infraestrutura de racks com visões detalhadas de capacidade, uso e condições ambientais."
+      }
+    },
+    "stats": {
+      "title": "Confiado por operadores de data center em todo o mundo",
+      "subtitle": "Entregando confiabilidade, segurança e eficiência para suas operações",
+      "uptime": "Tempo de Atividade",
+      "savings": "Economia de Custos",
+      "response": "Tempo de Resposta"
+    },
+    "integrations": {
+      "title": "Integrações Poderosas",
+      "subtitle": "Conecte-se com suas ferramentas favoritas",
+      "list": [
+        "Sistemas DCIM existentes",
+        "Plataformas de monitoramento",
+        "Sistemas BMS",
+        "Ferramentas de gestão de ativos",
+        "Sistemas ERP",
+        "Plataformas IoT"
+      ]
+    },
+    "cta": {
+      "title": "Pronto para começar?",
+      "subtitle": "Comece seu teste gratuito hoje",
+      "description": "Experimente o poder do gerenciamento inteligente de data center",
+      "button": "Cadastre-se agora"
+    }
+  }
+}

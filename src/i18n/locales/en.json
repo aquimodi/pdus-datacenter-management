@@ -1,0 +1,56 @@
+{
+  "landing": {
+    "hero": {
+      "title": "Intelligent Datacenter",
+      "subtitle": "Operations Management",
+      "description": "Monitor, manage, and optimize your datacenter operations in real-time. Get instant alerts, detailed analytics, and complete control over your infrastructure.",
+      "cta": "Get Started",
+      "contact": "Contact Sales"
+    },
+    "features": {
+      "title": "Features",
+      "subtitle": "Everything you need to manage your datacenter",
+      "monitoring": {
+        "title": "Real-time Monitoring",
+        "description": "Monitor temperature, humidity, and power consumption in real-time. Get instant alerts when parameters exceed thresholds."
+      },
+      "power": {
+        "title": "Power Management",
+        "description": "Track power consumption, manage load distribution, and optimize energy usage across your datacenter infrastructure."
+      },
+      "analytics": {
+        "title": "Advanced Analytics",
+        "description": "Get detailed insights into your datacenter operations with comprehensive analytics and customizable reports."
+      },
+      "rack": {
+        "title": "Rack Management",
+        "description": "Efficiently manage your rack infrastructure with detailed views of capacity, usage, and environmental conditions."
+      }
+    },
+    "stats": {
+      "title": "Trusted by datacenter operators worldwide",
+      "subtitle": "Delivering reliability, security, and efficiency to your operations",
+      "uptime": "Uptime",
+      "savings": "Cost Savings",
+      "response": "Response Time"
+    },
+    "integrations": {
+      "title": "Powerful Integrations",
+      "subtitle": "Connect with your favorite tools",
+      "list": [
+        "Existing DCIM systems",
+        "Monitoring platforms",
+        "BMS systems",
+        "Asset management tools",
+        "ERP systems",
+        "IoT platforms"
+      ]
+    },
+    "cta": {
+      "title": "Ready to get started?",
+      "subtitle": "Start your free trial today",
+      "description": "Experience the power of intelligent datacenter management",
+      "button": "Sign up now"
+    }
+  }
+}
