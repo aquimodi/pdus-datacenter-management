@@ -7,29 +7,24 @@ interface AppModeContextType extends AppMode {
 
 const AppModeContext = createContext<AppModeContextType | undefined>(undefined);
 
-// Create a global variable to store the isDemoMode state
-// This allows components that don't have direct access to the context
-// to still access the current mode
-let globalIsDemoMode = true;
+// Always return false for demo mode
+let globalIsDemoMode = false;
 
 export const getGlobalDemoMode = (): boolean => {
-  return globalIsDemoMode;
+  return false;
 };
 
 export const AppModeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [isDemoMode, setIsDemoMode] = useState(true);
+  // Force isDemoMode to always be false
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
-  // Update the global variable when isDemoMode changes
-  useEffect(() => {
-    globalIsDemoMode = isDemoMode;
-  }, [isDemoMode]);
-
+  // Dummy function that does nothing, kept for backward compatibility
   const toggleMode = () => {
-    setIsDemoMode((prev) => !prev);
+    // Do nothing, we always want to use real data
   };
 
   return (
-    <AppModeContext.Provider value={{ isDemoMode, toggleMode }}>
+    <AppModeContext.Provider value={{ isDemoMode: false, toggleMode }}>
       {children}
     </AppModeContext.Provider>
   );
@@ -40,5 +35,10 @@ export const useAppMode = (): AppModeContextType => {
   if (context === undefined) {
     throw new Error('useAppMode must be used within an AppModeProvider');
   }
-  return context;
+  
+  // Always return false for isDemoMode, regardless of what's in the context
+  return {
+    isDemoMode: false,
+    toggleMode: context.toggleMode
+  };
 };

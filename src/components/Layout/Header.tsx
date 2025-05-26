@@ -1,8 +1,7 @@
 import React from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { useAppMode } from '../../context/AppModeContext';
 import { useDebug } from '../../context/DebugContext';
-import { RefreshCw, Settings, LogOut, Database, ToggleRight, Server, ChevronLeft, ChevronRight, Info, Bug } from 'lucide-react';
+import { RefreshCw, Settings, Bug, Server, Info } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface HeaderProps {
@@ -23,7 +22,6 @@ const Header: React.FC<HeaderProps> = ({
   toggleAutoRefresh 
 }) => {
   const { user } = useAuth();
-  const { isDemoMode, toggleMode } = useAppMode();
   const { isDebugEnabled, toggleDebug } = useDebug();
   const [showUserMenu, setShowUserMenu] = React.useState(false);
 
@@ -38,17 +36,6 @@ const Header: React.FC<HeaderProps> = ({
         )}
         
         <div className="flex items-center space-x-2">
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              className="sr-only peer"
-              checked={isDemoMode}
-              onChange={toggleMode}
-            />
-            <div className="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-            <span className="ml-2 text-sm font-medium text-gray-300">Demo</span>
-          </label>
-          
           <label className="relative inline-flex items-center cursor-pointer ml-2">
             <input
               type="checkbox"
@@ -103,7 +90,7 @@ const Header: React.FC<HeaderProps> = ({
             </button>
             
             {showUserMenu && (
-              <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5">
+              <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50">
                 <div className="py-1">
                   <div className="px-4 py-2 text-sm text-gray-700 border-b border-gray-200">
                     <div className="font-medium">{user?.username}</div>

@@ -1,7 +1,6 @@
 import express from 'express';
 import { getSensorReadings } from '../config/db.js';
 import { setupLogger } from '../utils/logger.js';
-import { mockSensorData } from '../data/mockData.js';
 import { getDataWithFallback } from '../utils/api.js';
 
 const router = express.Router();
@@ -65,8 +64,8 @@ const transformSensorData = (rawData, requestId) => {
     return rawData.map(item => {
       return {
         RACK_NAME: item.NAME || item.name || item.rack_name || item.rackName || 'Unknown',
-        TEMPERATURE: item.TEMPERATURE || (item.temperature !== undefined ? item.temperature.toString() : (Math.random() * 15 + 20).toFixed(1)),
-        HUMIDITY: item.HUMIDITY || (item.humidity !== undefined ? item.humidity.toString() : (Math.random() * 30 + 40).toFixed(1)),
+        TEMPERATURE: item.TEMPERATURE || (item.temperature !== undefined ? item.temperature.toString() : null),
+        HUMIDITY: item.HUMIDITY || (item.humidity !== undefined ? item.humidity.toString() : null),
         SITE: item.SITE || item.site || 'Unknown',
         DC: item.DC || item.dc || item.datacenter || 'Unknown'
       };
@@ -116,65 +115,32 @@ router.get('/', async (req, res) => {
   try {
     logger.info(`[${requestId}] Fetching sensor readings`);
     
-    // Check for demo mode
-    const demoMode = req.query.demo === 'true';
-    
-    let data;
-    if (demoMode) {
-      // Use mock data in demo mode
-      data = mockSensorData.data.map(rack => ({
-        RACK_NAME: rack.NAME,
-        TEMPERATURE: rack.TEMPERATURE || (18 + Math.random() * 17).toFixed(1),
-        HUMIDITY: rack.HUMIDITY || (40 + Math.random() * 35).toFixed(1),
-        SITE: rack.SITE,
-        DC: rack.DC
-      }));
-      logger.info(`[${requestId}] Using mock sensor data (demo mode)`);
-    } else {
-      try {
-        // Get data from database with fallback to external API
-        let rawData = await getDataWithFallback(
-          getSensorReadings,
-          process.env.API2_URL,
-          'sensor readings',
-          {
-            retries: 3,
-            retryDelay: 1000,
-            useMockOnFail: true,
-            debug: true // Enable debugging for API calls
-          }
-        );
-        
-        // Check if we got the new API format (direct array)
-        if (rawData && Array.isArray(rawData) && rawData.length > 0 && 
-            rawData[0].hasOwnProperty('temperature') && typeof rawData[0].temperature === 'number') {
-          // Transform data from the new API format
-          data = transformNewSensorData(rawData, requestId);
-          logger.info(`[${requestId}] Processed data from new sensor API format`);
-        } else {
-          // Transform the data to ensure consistent format with legacy API
-          data = transformSensorData(rawData, requestId);
+    try {
+      // Get data from database with fallback to external API
+      let rawData = await getDataWithFallback(
+        getSensorReadings,
+        process.env.API2_URL,
+        'sensor readings',
+        {
+          retries: 3,
+          retryDelay: 1000,
+          useMockOnFail: false, // Don't use mock data
+          debug: true // Enable debugging for API calls
         }
+      );
+      
+      // Check if we got the new API format (direct array)
+      if (rawData && Array.isArray(rawData) && rawData.length > 0 && 
+          rawData[0].hasOwnProperty('temperature') && typeof rawData[0].temperature === 'number') {
+        // Transform data from the new API format
+        const data = transformNewSensorData(rawData, requestId);
+        logger.info(`[${requestId}] Processed data from new sensor API format`);
         
-        // Log the transformation results
-        logger.info(`[${requestId}] Transformed sensor data, got ${data.length} readings`);
-        if (data.length > 0) {
-          logger.debug(`[${requestId}] First sensor data item:`, data[0]);
-        }
-        
-        // If no data was returned or transformation failed, use mock data
-        if (!data || data.length === 0) {
-          logger.warn(`[${requestId}] No sensor data after transformation, falling back to mock data`);
-          data = mockSensorData.data.map(rack => ({
-            RACK_NAME: rack.NAME,
-            TEMPERATURE: rack.TEMPERATURE || (18 + Math.random() * 17).toFixed(1),
-            HUMIDITY: rack.HUMIDITY || (40 + Math.random() * 35).toFixed(1),
-            SITE: rack.SITE,
-            DC: rack.DC
-          }));
-        }
-      } catch (error) {
-        logger.error(`[${requestId}] Failed to retrieve sensor data:`, error);
+        // Format response
+        const response = {
+          status: "Success",
+          data: data
+        };
         
         // Calculate response time
         const responseTime = Date.now() - startTime;
@@ -185,52 +151,122 @@ router.get('/', async (req, res) => {
           timestamp: new Date().toISOString(),
           endpoint: '/api/sensors',
           method: 'GET',
-          status: 500,
+          status: 200,
           responseTime,
-          error: error.message
+          responseBody: response
         };
         
         // Include debug information in response headers
         res.set('X-Debug-Id', requestId);
         res.set('X-Debug-Time', `${responseTime}ms`);
         
-        return res.status(500).json({
-          status: "Error",
-          message: error.message,
-          debug: debugLog
-        });
+        if (req.headers['x-debug'] === 'true') {
+          response.debug = debugLog;
+        }
+        
+        return res.status(200).json(response);
+      } else {
+        // Transform the data to ensure consistent format with legacy API
+        const data = transformSensorData(rawData, requestId);
+        
+        // Log the transformation results
+        logger.info(`[${requestId}] Transformed sensor data, got ${data.length} readings`);
+        if (data.length > 0) {
+          logger.debug(`[${requestId}] First sensor data item:`, data[0]);
+        }
+        
+        // If no data was returned or transformation failed, return empty array
+        if (!data || data.length === 0) {
+          logger.warn(`[${requestId}] No sensor data after transformation, returning empty array`);
+          
+          // Format response with empty array
+          const response = {
+            status: "Success",
+            data: []
+          };
+          
+          // Calculate response time
+          const responseTime = Date.now() - startTime;
+          
+          // Log for debug panel
+          const debugLog = {
+            id: requestId,
+            timestamp: new Date().toISOString(),
+            endpoint: '/api/sensors',
+            method: 'GET',
+            status: 200,
+            responseTime,
+            responseBody: response
+          };
+          
+          // Include debug information in response headers
+          res.set('X-Debug-Id', requestId);
+          res.set('X-Debug-Time', `${responseTime}ms`);
+          
+          if (req.headers['x-debug'] === 'true') {
+            response.debug = debugLog;
+          }
+          
+          return res.status(200).json(response);
+        }
+        
+        // Format response
+        const response = {
+          status: "Success",
+          data: data
+        };
+        
+        // Calculate response time
+        const responseTime = Date.now() - startTime;
+        
+        // Log for debug panel
+        const debugLog = {
+          id: requestId,
+          timestamp: new Date().toISOString(),
+          endpoint: '/api/sensors',
+          method: 'GET',
+          status: 200,
+          responseTime,
+          responseBody: response
+        };
+        
+        // Include debug information in response headers
+        res.set('X-Debug-Id', requestId);
+        res.set('X-Debug-Time', `${responseTime}ms`);
+        
+        if (req.headers['x-debug'] === 'true') {
+          response.debug = debugLog;
+        }
+        
+        return res.status(200).json(response);
       }
+    } catch (error) {
+      logger.error(`[${requestId}] Failed to retrieve sensor data:`, error);
+      
+      // Calculate response time
+      const responseTime = Date.now() - startTime;
+      
+      // Log for debug panel
+      const debugLog = {
+        id: requestId,
+        timestamp: new Date().toISOString(),
+        endpoint: '/api/sensors',
+        method: 'GET',
+        status: 500,
+        responseTime,
+        error: error.message
+      };
+      
+      // Include debug information in response headers
+      res.set('X-Debug-Id', requestId);
+      res.set('X-Debug-Time', `${responseTime}ms`);
+      
+      return res.status(500).json({
+        status: "Error",
+        message: error.message,
+        debug: debugLog
+      });
     }
-    
-    // Format response similar to original API
-    const response = {
-      status: "Success",
-      data: data
-    };
-    
-    // Calculate response time
-    const responseTime = Date.now() - startTime;
-    
-    // Log for debug panel
-    const debugLog = {
-      id: requestId,
-      timestamp: new Date().toISOString(),
-      endpoint: '/api/sensors',
-      method: 'GET',
-      status: 200,
-      responseTime,
-      responseBody: response
-    };
-    
-    // Include debug information in response headers
-    res.set('X-Debug-Id', requestId);
-    res.set('X-Debug-Time', `${responseTime}ms`);
-    
-    if (req.headers['x-debug'] === 'true') {
-      response.debug = debugLog;
-    }
-    
-    res.status(200).json(response);
   } catch (error) {
     logger.error(`[${requestId}] Error in sensors route:`, error);
     

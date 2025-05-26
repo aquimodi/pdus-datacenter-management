@@ -1,7 +1,6 @@
 import express from 'express';
 import { getProblems } from '../config/db.js';
 import { setupLogger } from '../utils/logger.js';
-import { mockProblemsData } from '../data/mockData.js';
 
 const router = express.Router();
 const logger = setupLogger();
@@ -72,74 +71,63 @@ router.get('/', async (req, res) => {
   try {
     // Check for historical param (defaults to false - current problems)
     const isHistorical = req.query.historical === 'true';
-    // Check for demo mode
-    const demoMode = req.query.demo === 'true';
     
-    logger.info(`[${requestId}] Fetching ${isHistorical ? 'historical' : 'current'} problems data. Demo mode: ${demoMode}`);
+    logger.info(`[${requestId}] Fetching ${isHistorical ? 'historical' : 'current'} problems data.`);
     
-    let data;
-    if (demoMode) {
-      // Use mock data in demo mode
-      data = isHistorical ? mockProblemsData.historical : mockProblemsData.current;
-      logger.info(`[${requestId}] Using mock ${isHistorical ? 'historical' : 'current'} problems data (demo mode)`);
-    } else {
-      try {
-        // Get real data from database
-        data = await getProblems(isHistorical);
-        
-        // Log the raw data for debugging
-        logger.debug(`[${requestId}] Raw problems data from database:`, {
-          count: data.length,
-          first: data.length > 0 ? data[0] : null
-        });
-        
-        // Enhance data with severity and current values
-        data = enhanceProblemsData(data);
-        
-        logger.info(`[${requestId}] Retrieved ${data.length} ${isHistorical ? 'historical' : 'current'} problems from database`);
-      } catch (dbError) {
-        // If database access fails, fall back to mock data but log the error
-        logger.error(`[${requestId}] Database access failed: ${dbError.message}. Using mock data as fallback.`, {
-          error: dbError.message,
-          stack: dbError.stack
-        });
-        data = isHistorical ? mockProblemsData.historical : mockProblemsData.current;
+    try {
+      // Get real data from database
+      const data = await getProblems(isHistorical);
+      
+      // Log the raw data for debugging
+      logger.debug(`[${requestId}] Raw problems data from database:`, {
+        count: data.length,
+        first: data.length > 0 ? data[0] : null
+      });
+      
+      // Enhance data with severity and current values
+      const enhancedData = enhanceProblemsData(data);
+      
+      logger.info(`[${requestId}] Retrieved ${enhancedData.length} ${isHistorical ? 'historical' : 'current'} problems from database`);
+      
+      // Format response
+      const response = {
+        status: "Success",
+        data: enhancedData
+      };
+      
+      // Calculate response time
+      const responseTime = Date.now() - startTime;
+      
+      // Log for debug panel
+      const debugLog = {
+        id: requestId,
+        timestamp: new Date().toISOString(),
+        endpoint: '/api/problems',
+        method: 'GET',
+        status: 200,
+        responseTime,
+        requestBody: { historical: isHistorical },
+        responseBody: response
+      };
+      
+      // Include debug information in response headers
+      res.set('X-Debug-Id', requestId);
+      res.set('X-Debug-Time', `${responseTime}ms`);
+      
+      if (req.headers['x-debug'] === 'true') {
+        response.debug = debugLog;
       }
+      
+      res.status(200).json(response);
+    } catch (dbError) {
+      // If database access fails, log the error
+      logger.error(`[${requestId}] Database access failed: ${dbError.message}.`, {
+        error: dbError.message,
+        stack: dbError.stack
+      });
+      
+      throw dbError;
     }
-    
-    // Format response
-    const response = {
-      status: "Success",
-      data: data
-    };
-    
-    // Calculate response time
-    const responseTime = Date.now() - startTime;
-    
-    // Log for debug panel
-    const debugLog = {
-      id: requestId,
-      timestamp: new Date().toISOString(),
-      endpoint: '/api/problems',
-      method: 'GET',
-      status: 200,
-      responseTime,
-      requestBody: { 
-        historical: isHistorical, 
-        demo: demoMode 
-      },
-      responseBody: response
-    };
-    
-    // Include debug information in response headers
-    res.set('X-Debug-Id', requestId);
-    res.set('X-Debug-Time', `${responseTime}ms`);
-    
-    if (req.headers['x-debug'] === 'true') {
-      response.debug = debugLog;
-    }
-    
-    res.status(200).json(response);
   } catch (error) {
     logger.error(`[${requestId}] Error fetching ${req.query.historical === 'true' ? 'historical' : 'current'} problems data:`, error);
     
@@ -155,8 +143,7 @@ router.get('/', async (req, res) => {
       status: 500,
       responseTime,
       requestBody: { 
-        historical: req.query.historical === 'true', 
-        demo: req.query.demo === 'true' 
+        historical: req.query.historical === 'true'
       },
       error: error.message
     };

@@ -1,12 +1,10 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { useAppMode } from '../../context/AppModeContext';
-import { LayoutDashboard, Settings, AlertTriangle, Users, LogOut, Database, ToggleRight, Server, ChevronLeft, ChevronRight, Info } from 'lucide-react';
+import { LayoutDashboard, Settings, AlertTriangle, Users, LogOut, Database, Server, ChevronLeft, ChevronRight, Info } from 'lucide-react';
 
 const Sidebar: React.FC = () => {
   const { user, logout } = useAuth();
-  const { isDemoMode, toggleMode } = useAppMode();
   const location = useLocation();
   const navigate = useNavigate();
   const [isCollapsed, setIsCollapsed] = React.useState(false);

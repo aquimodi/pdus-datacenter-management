@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { setupLogger } from './logger.js';
-import { mockSensorData } from '../data/mockData.js';
 
 const logger = setupLogger();
 
@@ -378,7 +377,7 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
   const {
     retries = 3,
     retryDelay = 1000,
-    useMockOnFail = true,
+    useMockOnFail = false, // Changed default to false
     useCircuitBreaker = true,
     usePagination = true,
     pageSize = 50, // Reduced page size
@@ -394,16 +393,11 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
   
   // Check if circuit breaker is open for this endpoint
   if (useCircuitBreaker && circuitBreaker.isOpen(url)) {
-    logger.warn(`Circuit breaker open for ${url}. Skipping API call and using fallback.`, {
+    logger.warn(`Circuit breaker open for ${url}. Skipping API call.`, {
       requestId,
       url,
       source
     });
-    
-    if (useMockOnFail) {
-      logger.info(`Using mock data for ${source} due to open circuit`, { requestId });
-      return getMockDataForSource(source);
-    }
     
     throw new Error(`Service unavailable: ${source} API is currently unavailable (circuit open)`);
   }
@@ -699,19 +693,8 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
     }
   }
   
-  // If we've exhausted all retries and useMockOnFail is true, return mock data
-  if (useMockOnFail) {
-    logger.warn(`Todos los ${retries + 1} intentos de obtener datos de la API ${source} han fallado. Usando datos simulados como alternativa.`, {
-      requestId,
-      url,
-      source
-    });
-    
-    return getMockDataForSource(source);
-  }
-  
-  // If we don't want to use mock data, throw the last error
-  logger.error(`Error al obtener datos de la API ${source} después de ${retries + 1} intentos y sin usar datos simulados`, {
+  // If we've exhausted all retries, throw the last error
+  logger.error(`Error al obtener datos de la API ${source} después de ${retries + 1} intentos`, {
     requestId,
     error: lastError?.message
   });
@@ -720,54 +703,7 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
 };
 
 /**
- * Helper function to get appropriate mock data based on the source
- * @param {string} source - Description of the data source
- * @returns {Object} Mock data appropriate for the source
- */
-function getMockDataForSource(source) {
-  // Determine which mock data to return based on the source
-  if (source.toLowerCase().includes('rack')) {
-    logger.debug(`Devolviendo datos simulados de racks para ${source}`);
-    return { status: "Success", data: mockSensorData.data };
-  } else if (source.toLowerCase().includes('sensor')) {
-    logger.debug(`Devolviendo datos simulados de sensores para ${source}`);
-    return { 
-      status: "Success", 
-      data: mockSensorData.data.map(rack => ({
-        RACK_NAME: rack.NAME,
-        TEMPERATURE: rack.TEMPERATURE || (18 + Math.random() * 17).toFixed(1),
-        HUMIDITY: rack.HUMIDITY || (40 + Math.random() * 35).toFixed(1),
-        SITE: rack.SITE,
-        DC: rack.DC
-      }))
-    };
-  } else if (source.toLowerCase().includes('threshold')) {
-    logger.debug(`Devolviendo datos simulados de umbrales para ${source}`);
-    return {
-      status: "Success",
-      data: [{
-        id: "mock-threshold-id",
-        name: "global",
-        min_temp: 18.0,
-        max_temp: 32.0,
-        min_humidity: 40.0,
-        max_humidity: 70.0,
-        max_power_single_phase: 16.0,
-        max_power_three_phase: 48.0,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }]
-    };
-  }
-  
-  // Generic mock data
-  logger.debug(`Devolviendo datos simulados vacíos para ${source}`);
-  return { status: "Success", data: [] };
-}
-
-/**
- * Attempts to get data from database first, falls back to external API if DB fails,
- * and finally falls back to mock data if both fail
+ * Attempts to get data from database first, falls back to external API if DB fails
  * @param {Function} dbFunction - Function to get data from database
  * @param {string} apiUrl - External API URL for fallback
  * @param {string} source - Description of the data source (for logging)
@@ -889,6 +825,13 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
         requestId,
         source
       });
+      
+      // Return empty array instead of using mock data
+      logger.warn(`[${requestId}] Devolviendo array vacío para ${source}`, {
+        requestId,
+        source
+      });
+      return [];
     }
   } catch (apiError) {
     logger.error(`[${requestId}] Tanto el acceso a la base de datos como a la API fallaron para ${source}`, {
@@ -898,49 +841,13 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
       source
     });
     
-    // If configured to use mock data as final fallback
-    if (options.useMockOnFail !== false) {
-      logger.warn(`[${requestId}] Usando datos simulados como último recurso para ${source}`, {
-        requestId,
-        source
-      });
-      
-      const mockData = getMockDataForSource(source).data;
-      logger.info(`[${requestId}] Recuperados ${mockData.length} registros simulados de ${source}`, {
-        requestId,
-        itemCount: mockData.length,
-        source,
-        method: 'mock-data'
-      });
-      
-      return mockData;
-    }
-    
-    logger.error(`[${requestId}] No se pudieron recuperar datos de ${source}: ${apiError.message}`, {
+    // Return empty array instead of using mock data
+    logger.warn(`[${requestId}] Devolviendo array vacío para ${source} después de fallar todos los métodos`, {
       requestId,
-      error: apiError.message,
       source
     });
-    
-    throw new Error(`No se pudieron recuperar datos de ${source}: ${apiError.message}`);
+    return [];
   }
-  
-  // If we get here, it means both database and API failed in some way but didn't throw an error
-  // Return mock data as a last resort
-  logger.warn(`[${requestId}] Recurriendo a datos simulados para ${source} después de que todos los métodos de recuperación fallaran`, {
-    requestId,
-    source
-  });
-  
-  const mockData = getMockDataForSource(source).data;
-  logger.info(`[${requestId}] Recuperados ${mockData.length} registros simulados de ${source} como último recurso`, {
-    requestId,
-    itemCount: mockData.length,
-    source,
-    method: 'mock-data-last-resort'
-  });
-  
-  return mockData;
 };
 
 /**
@@ -1149,6 +1056,7 @@ export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
               diagnosisId,
               status
             });
+            return false;
           }
           return true; // Accept any status code for diagnostic purposes
         }

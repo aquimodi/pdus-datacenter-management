@@ -1,15 +1,13 @@
 import { ApiResponse, SensorApiResponse, ProblemsApiResponse, PowerData, SensorData, ThresholdsApiResponse, Threshold } from '../types';
 import { routeRequest } from '../api/route';
-import { getGlobalDemoMode } from '../context/AppModeContext';
 
 export const fetchRackData = async (): Promise<ApiResponse> => {
   // Determine if we're using the local Node.js server
   const useLocalServer = import.meta.env.VITE_USE_LOCAL_SERVER === 'true';
-  const isDemo = getGlobalDemoMode();
   
   // API URL - if using local server, use the new endpoint
   let url = useLocalServer 
-    ? `${import.meta.env.VITE_LOCAL_SERVER_URL || 'http://localhost:3000'}/api/racks${isDemo ? '?demo=true' : ''}`
+    ? `${import.meta.env.VITE_LOCAL_SERVER_URL || 'http://localhost:3000'}/api/racks`
     : import.meta.env.VITE_API1_URL;
     
   // Add OData pagination parameters if using external API
@@ -30,7 +28,7 @@ export const fetchRackData = async (): Promise<ApiResponse> => {
     }
   }
   
-  console.log(`Consultando datos de racks desde: ${url} (servidor local: ${useLocalServer}, modo demo: ${isDemo})`);
+  console.log(`Consultando datos de racks desde: ${url} (servidor local: ${useLocalServer})`);
   
   try {
     const response = await routeRequest({
@@ -109,11 +107,10 @@ export const fetchRackData = async (): Promise<ApiResponse> => {
 export const fetchSensorData = async (): Promise<SensorApiResponse> => {
   // Determine if we're using the local Node.js server
   const useLocalServer = import.meta.env.VITE_USE_LOCAL_SERVER === 'true';
-  const isDemo = getGlobalDemoMode();
   
   // API URL - if using local server, use the new endpoint
   let url = useLocalServer 
-    ? `${import.meta.env.VITE_LOCAL_SERVER_URL || 'http://localhost:3000'}/api/sensors${isDemo ? '?demo=true' : ''}`
+    ? `${import.meta.env.VITE_LOCAL_SERVER_URL || 'http://localhost:3000'}/api/sensors`
     : import.meta.env.VITE_API2_URL;
   
   // Add OData pagination parameters if using external API
@@ -134,7 +131,7 @@ export const fetchSensorData = async (): Promise<SensorApiResponse> => {
     }
   }
   
-  console.log(`Consultando datos de sensores desde: ${url} (servidor local: ${useLocalServer}, modo demo: ${isDemo})`);
+  console.log(`Consultando datos de sensores desde: ${url} (servidor local: ${useLocalServer})`);
   
   try {
     const response = await routeRequest({
@@ -189,12 +186,11 @@ export const fetchSensorData = async (): Promise<SensorApiResponse> => {
 export const fetchProblemsData = async (isHistorical: boolean = false): Promise<ProblemsApiResponse> => {
   // Determine if we're using the local Node.js server
   const useLocalServer = import.meta.env.VITE_USE_LOCAL_SERVER === 'true';
-  const isDemo = getGlobalDemoMode();
   
   // API URL for problems
-  const url = `${import.meta.env.VITE_LOCAL_SERVER_URL || 'http://localhost:3000'}/api/problems?historical=${isHistorical}${isDemo ? '&demo=true' : ''}`;
+  const url = `${import.meta.env.VITE_LOCAL_SERVER_URL || 'http://localhost:3000'}/api/problems?historical=${isHistorical}`;
   
-  console.log(`Obteniendo problemas ${isHistorical ? 'históricos' : 'actuales'} desde: ${url} (modo demo: ${isDemo})`);
+  console.log(`Obteniendo problemas ${isHistorical ? 'históricos' : 'actuales'} desde: ${url}`);
   
   try {
     const response = await routeRequest({
@@ -211,14 +207,13 @@ export const fetchProblemsData = async (isHistorical: boolean = false): Promise<
   }
 };
 
-// New function to fetch threshold values
+// Function to fetch threshold values
 export const fetchThresholds = async (): Promise<ThresholdsApiResponse> => {
   const useLocalServer = import.meta.env.VITE_USE_LOCAL_SERVER === 'true';
-  const isDemo = getGlobalDemoMode();
   
-  const url = `${import.meta.env.VITE_LOCAL_SERVER_URL || 'http://localhost:3000'}/api/thresholds${isDemo ? '?demo=true' : ''}`;
+  const url = `${import.meta.env.VITE_LOCAL_SERVER_URL || 'http://localhost:3000'}/api/thresholds`;
   
-  console.log(`Obteniendo umbrales desde: ${url} (modo demo: ${isDemo})`);
+  console.log(`Obteniendo umbrales desde: ${url}`);
   
   try {
     const response = await routeRequest({
@@ -234,7 +229,7 @@ export const fetchThresholds = async (): Promise<ThresholdsApiResponse> => {
   }
 };
 
-// New function to update threshold values
+// Function to update threshold values
 export const updateThresholds = async (thresholds: Partial<Threshold>): Promise<{status: string; message?: string}> => {
   const useLocalServer = import.meta.env.VITE_USE_LOCAL_SERVER === 'true';
   

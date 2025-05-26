@@ -2,7 +2,6 @@ import React, { useState, useMemo, useEffect } from 'react';
 import MainLayout from '../components/Layout/MainLayout';
 import { AlertTriangle, Filter, ArrowDownToLine, Clock, X, ChevronUp, ChevronDown, XCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { useAppMode } from '../context/AppModeContext';
 import { fetchProblemsData } from '../services/api';
 import { Problem } from '../types';
 
@@ -18,7 +17,7 @@ interface FilterState {
 
 const ProblemsPage: React.FC = () => {
   const { user } = useAuth();
-  const { isDemoMode } = useAppMode();
+  
   const [filters, setFilters] = useState<FilterState>({
     problemType: '',
     datacenter: '',
@@ -82,7 +81,7 @@ const ProblemsPage: React.FC = () => {
       
       return () => clearInterval(interval);
     }
-  }, [filters.timeframe, isAutoRefresh, isDemoMode]);
+  }, [filters.timeframe, isAutoRefresh]);
 
   // Get unique values for filters
   const uniqueDatacenters = useMemo(() => {
@@ -486,14 +485,6 @@ const ProblemsPage: React.FC = () => {
                 No problems found matching the current filters.
               </div>
             )}
-          </div>
-          
-          <div className="mt-6 p-4 text-center text-sm text-gray-500 bg-gray-50 rounded-md">
-            <p>
-              <span className="font-medium">Demo Mode:</span> {isDemoMode ? 'Active' : 'Inactive'} - 
-              {isDemoMode ? ' Using simulated problems data' : ' Using real database data'}
-            </p>
-            <p className="mt-1">To toggle demo mode, use the switch in the top navigation bar.</p>
           </div>
         </div>
       </div>

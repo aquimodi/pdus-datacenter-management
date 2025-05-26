@@ -1,7 +1,6 @@
 import express from 'express';
 import { getRacks } from '../config/db.js';
 import { setupLogger } from '../utils/logger.js';
-import { mockSensorData } from '../data/mockData.js';
 import { getDataWithFallback } from '../utils/api.js';
 import axios from 'axios';
 
@@ -78,129 +77,117 @@ router.get('/', async (req, res) => {
   try {
     logger.info(`[${requestId}] Fetching racks data`);
     
-    // Check for demo mode
-    const demoMode = req.query.demo === 'true';
-    
-    let data;
-    if (demoMode) {
-      // Use mock data in demo mode
-      data = mockSensorData.data;
-      logger.info(`[${requestId}] Using mock data (demo mode)`);
-    } else {
-      try {
-        // Get data from database with fallback to external API
-        data = await getDataWithFallback(
-          getRacks,
-          process.env.API1_URL,
-          'racks',
-          {
-            retries: 3,
-            retryDelay: 1000,
-            useMockOnFail: true,
-            debug: true // Enable debugging for API calls
-          }
-        );
-
-        // New API response is a direct array, not wrapped in data property
-        if (data && Array.isArray(data) && !('status' in data)) {
-          // This is likely the new API format - transform it
-          logger.info(`[${requestId}] Detected new API format, transforming data`);
-          data = transformPowerData(data, requestId);
-        } else if (data && Array.isArray(data)) {
-          // Log successful data retrieval and first item for debugging
-          logger.info(`[${requestId}] Successfully retrieved ${data.length} racks`);
-          if (data.length > 0) {
-            logger.debug(`[${requestId}] First rack item sample:`, data[0]);
-          }
-        } else {
-          // If data is not an array, try to transform it
-          logger.warn(`[${requestId}] Received non-array racks data, attempting to transform`);
-          
-          // Attempt to transform based on common API structures
-          if (data && typeof data === 'object') {
-            if (data.items && Array.isArray(data.items)) {
-              // Some APIs use "items" property for the data array
-              logger.info(`[${requestId}] Transformed data from 'items' array`);
-              data = data.items;
-            } else if (data.racks && Array.isArray(data.racks)) {
-              // Some APIs might use "racks" property
-              logger.info(`[${requestId}] Transformed data from 'racks' array`);
-              data = data.racks;
-            } else if (data.results && Array.isArray(data.results)) {
-              // Some APIs use "results" property
-              logger.info(`[${requestId}] Transformed data from 'results' array`);
-              data = data.results;
-            } else if (data.data && Array.isArray(data.data)) {
-              // Some APIs use "data" property
-              logger.info(`[${requestId}] Transformed data from 'data' array`);
-              data = data.data;
-            } else {
-              // If still not an array, fall back to mock data
-              logger.error(`[${requestId}] Failed to transform API response to array, using mock data`);
-              data = mockSensorData.data;
-            }
-          } else {
-            // If data is null, undefined, or not an object, use mock data
-            logger.error(`[${requestId}] Invalid data format from API, using mock data`);
-            data = mockSensorData.data;
-          }
+    try {
+      // Get data from database with fallback to external API
+      const data = await getDataWithFallback(
+        getRacks,
+        process.env.API1_URL,
+        'racks',
+        {
+          retries: 3,
+          retryDelay: 1000,
+          useMockOnFail: false, // Don't use mock data on failure
+          debug: true // Enable debugging for API calls
         }
-      } catch (error) {
-        logger.error(`[${requestId}] Failed to retrieve racks data:`, error);
+      );
+
+      // New API response is a direct array, not wrapped in data property
+      if (data && Array.isArray(data) && !('status' in data)) {
+        // This is likely the new API format - transform it
+        logger.info(`[${requestId}] Detected new API format, transforming data`);
+        const transformedData = transformPowerData(data, requestId);
+        
+        // Format response
+        const response = {
+          status: "Success",
+          data: transformedData
+        };
+        
+        // Calculate response time
+        const responseTime = Date.now() - startTime;
         
         // Log for debug panel
-        const responseTime = Date.now() - startTime;
         const debugLog = {
           id: requestId,
           timestamp: new Date().toISOString(),
           endpoint: '/api/racks',
           method: 'GET',
-          status: 500,
+          status: 200,
           responseTime,
-          error: error.message
+          responseBody: response
         };
         
         // Include debug information in response headers
         res.set('X-Debug-Id', requestId);
         res.set('X-Debug-Time', `${responseTime}ms`);
         
-        return res.status(500).json({
-          status: "Error",
-          message: error.message,
-          debug: debugLog
-        });
+        if (req.headers['x-debug'] === 'true') {
+          response.debug = debugLog;
+        }
+        
+        return res.status(200).json(response);
       }
+      
+      // Log successful data retrieval and first item for debugging
+      logger.info(`[${requestId}] Successfully retrieved ${data.length} racks`);
+      if (data.length > 0) {
+        logger.debug(`[${requestId}] First rack item sample:`, data[0]);
+      }
+      
+      // Format response similar to original API
+      const response = {
+        status: "Success",
+        data: data
+      };
+      
+      // Calculate response time
+      const responseTime = Date.now() - startTime;
+      
+      // Log for debug panel
+      const debugLog = {
+        id: requestId,
+        timestamp: new Date().toISOString(),
+        endpoint: '/api/racks',
+        method: 'GET',
+        status: 200,
+        responseTime,
+        responseBody: response
+      };
+      
+      // Include debug information in response headers
+      res.set('X-Debug-Id', requestId);
+      res.set('X-Debug-Time', `${responseTime}ms`);
+      
+      if (req.headers['x-debug'] === 'true') {
+        response.debug = debugLog;
+      }
+      
+      res.status(200).json(response);
+    } catch (error) {
+      logger.error(`[${requestId}] Failed to retrieve racks data:`, error);
+      
+      // Log for debug panel
+      const responseTime = Date.now() - startTime;
+      const debugLog = {
+        id: requestId,
+        timestamp: new Date().toISOString(),
+        endpoint: '/api/racks',
+        method: 'GET',
+        status: 500,
+        responseTime,
+        error: error.message
+      };
+      
+      // Include debug information in response headers
+      res.set('X-Debug-Id', requestId);
+      res.set('X-Debug-Time', `${responseTime}ms`);
+      
+      return res.status(500).json({
+        status: "Error",
+        message: error.message,
+        debug: debugLog
+      });
     }
-    
-    // Format response similar to original API
-    const response = {
-      status: "Success",
-      data: data
-    };
-    
-    // Calculate response time
-    const responseTime = Date.now() - startTime;
-    
-    // Log for debug panel
-    const debugLog = {
-      id: requestId,
-      timestamp: new Date().toISOString(),
-      endpoint: '/api/racks',
-      method: 'GET',
-      status: 200,
-      responseTime,
-      responseBody: response
-    };
-    
-    // Include debug information in response headers
-    res.set('X-Debug-Id', requestId);
-    res.set('X-Debug-Time', `${responseTime}ms`);
-    
-    if (req.headers['x-debug'] === 'true') {
-      response.debug = debugLog;
-    }
-    
-    res.status(200).json(response);
   } catch (error) {
     logger.error(`[${requestId}] Error in racks route:`, error);
     

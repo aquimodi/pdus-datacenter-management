@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ApiResponse, Rack, DatacenterGroup } from '../types';
-import { useAppMode } from '../context/AppModeContext';
 import { fetchRackData, fetchSensorData, fetchThresholds } from '../services/api';
-import { mockSensorData } from '../services/mockData';
 import { useThresholdSettings } from './useThresholdSettings';
 
 interface UseSensorDataProps {
@@ -10,7 +8,6 @@ interface UseSensorDataProps {
 }
 
 export const useSensorData = ({ refreshInterval }: UseSensorDataProps = {}) => {
-  const { isDemoMode } = useAppMode();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<Rack[]>([]);
@@ -52,40 +49,37 @@ export const useSensorData = ({ refreshInterval }: UseSensorDataProps = {}) => {
       let response: ApiResponse;
       let sensorResponse;
       
-      if (isDemoMode) {
-        response = mockSensorData;
-      } else {
-        [response, sensorResponse] = await Promise.all([
-          fetchRackData(),
-          fetchSensorData()
-        ]);
-        
-        // If we have sensor data, update the rack data with it
-        if (sensorResponse?.status === "Success") {
-          response.data = response.data.map(rack => {
-            // Find all sensors for this rack
-            const rackSensors = sensorResponse.data.filter(
-              sensor => sensor.RACK_NAME === rack.NAME
-            );
+      // Get data from API
+      [response, sensorResponse] = await Promise.all([
+        fetchRackData(),
+        fetchSensorData()
+      ]);
+      
+      // If we have sensor data, update the rack data with it
+      if (sensorResponse?.status === "Success") {
+        response.data = response.data.map(rack => {
+          // Find all sensors for this rack
+          const rackSensors = sensorResponse.data.filter(
+            sensor => sensor.RACK_NAME === rack.NAME
+          );
+          
+          if (rackSensors.length > 0) {
+            // Get maximum temperature and humidity values
+            const maxTemp = Math.max(...rackSensors.map(s => parseFloat(s.TEMPERATURE) || 0));
+            const maxHumidity = Math.max(...rackSensors.map(s => parseFloat(s.HUMIDITY) || 0));
             
-            if (rackSensors.length > 0) {
-              // Get maximum temperature and humidity values
-              const maxTemp = Math.max(...rackSensors.map(s => parseFloat(s.TEMPERATURE)));
-              const maxHumidity = Math.max(...rackSensors.map(s => parseFloat(s.HUMIDITY)));
-              
-              return {
-                ...rack,
-                TEMPERATURE: maxTemp.toString(),
-                HUMIDITY: maxHumidity.toString(),
-                // Set alerts based on thresholds
-                TEMP_ALERT: maxTemp > (Number(thresholds.max_temp) || 32) || maxTemp < (Number(thresholds.min_temp) || 18),
-                HUMIDITY_ALERT: maxHumidity > (Number(thresholds.max_humidity) || 70) || maxHumidity < (Number(thresholds.min_humidity) || 40)
-              };
-            }
-            
-            return rack;
-          });
-        }
+            return {
+              ...rack,
+              TEMPERATURE: maxTemp.toString(),
+              HUMIDITY: maxHumidity.toString(),
+              // Set alerts based on thresholds
+              TEMP_ALERT: maxTemp > (Number(thresholds.max_temp) || 32) || maxTemp < (Number(thresholds.min_temp) || 18),
+              HUMIDITY_ALERT: maxHumidity > (Number(thresholds.max_humidity) || 70) || maxHumidity < (Number(thresholds.min_humidity) || 40)
+            };
+          }
+          
+          return rack;
+        });
       }
       
       if (response.status === "Success") {
@@ -121,7 +115,7 @@ export const useSensorData = ({ refreshInterval }: UseSensorDataProps = {}) => {
     } finally {
       setLoading(false);
     }
-  }, [isDemoMode, thresholds]);
+  }, [thresholds]);
 
   // Handle auto-refresh
   useEffect(() => {
