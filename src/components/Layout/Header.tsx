@@ -21,7 +21,7 @@ const Header: React.FC<HeaderProps> = ({
   isAutoRefresh, 
   toggleAutoRefresh 
 }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { isDebugEnabled, toggleDebug } = useDebug();
   const [showUserMenu, setShowUserMenu] = React.useState(false);
 

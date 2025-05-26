@@ -314,12 +314,12 @@ export const executeQuery = async (query, params = [], options = {}) => {
     // Check if error is due to connection issues
     if (err.code === 'ESOCKET' || err.code === 'ETIMEDOUT' || err.code === 'ECONNRESET' || 
         (err.message && (err.message.includes('connection') || err.message.includes('timeout')))) {
-      // Connection-related error, reset pool for reconnection on next query
-      logger.warn('SQL connection error detected. Resetting pool for next query attempt.', {
+      logger.warn('Connection error detected. Will attempt to reconnect...', {
         code: err.code,
         message: err.message
       });
       
+      // Reset the pool for reconnection on next query
       pool = null;
       isConnecting = false;
     }
@@ -477,8 +477,7 @@ export const getRacks = async () => {
   } catch (error) {
     logger.error(`Failed to fetch racks`, { 
       queryId, 
-      error: error.message,
-      query 
+      error: error.message 
     });
     return [];
   }
@@ -531,8 +530,7 @@ export const getSensorReadings = async () => {
   } catch (error) {
     logger.error(`Failed to fetch sensor readings`, { 
       queryId, 
-      error: error.message,
-      query 
+      error: error.message 
     });
     return [];
   }

@@ -8,15 +8,13 @@ interface AppModeContextType extends AppMode {
 const AppModeContext = createContext<AppModeContextType | undefined>(undefined);
 
 // Always return false for demo mode
-let globalIsDemoMode = false;
-
 export const getGlobalDemoMode = (): boolean => {
   return false;
 };
 
 export const AppModeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Force isDemoMode to always be false
-  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [isDemoMode] = useState(false);
 
   // Dummy function that does nothing, kept for backward compatibility
   const toggleMode = () => {

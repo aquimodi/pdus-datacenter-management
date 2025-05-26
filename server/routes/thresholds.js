@@ -60,7 +60,7 @@ router.get('/', async (req, res) => {
       });
       
       const query = `
-        SELECT
+        SELECT TOP 1
           id,
           name,
           min_temp,
@@ -81,7 +81,7 @@ router.get('/', async (req, res) => {
         data = await executeQuery(query, [], { 
           queryId: requestId, 
           label: 'Get Thresholds Direct', 
-          timeout: 5000 // Reduced timeout
+          timeout: 3000 // Reduced timeout to 3 seconds
         });
         
         const directQueryDuration = Date.now() - startDirectQueryTime;
@@ -112,7 +112,7 @@ router.get('/', async (req, res) => {
         data = await executeQuery("EXEC sp_get_thresholds", [], {
           queryId: requestId,
           label: 'Get Thresholds SP',
-          timeout: 5000 // Reduced timeout
+          timeout: 3000 // Reduced timeout to 3 seconds
         });
         
         const spDuration = Date.now() - spStartTime;
@@ -277,84 +277,34 @@ router.put('/', async (req, res) => {
       }
     });
     
-    // Try using updateThresholds function first
-    try {
-      const updateResult = await updateThresholds({
-        min_temp, 
-        max_temp, 
-        min_humidity, 
-        max_humidity, 
-        max_power_single_phase, 
-        max_power_three_phase
-      });
-      
-      logger.info(`[${requestId}] Thresholds updated successfully using updateThresholds function`, {
-        requestId,
-        result: updateResult
-      });
-    } catch (updateError) {
-      logger.error(`[${requestId}] updateThresholds function failed: ${updateError.message}. Trying direct query.`, {
-        requestId,
-        error: updateError.message,
-        stack: updateError.stack
-      });
-      
-      // First check if previous records exist
-      logger.info(`[${requestId}] Checking if threshold record exists`, {
-        requestId
-      });
-      
-      const checkQuery = `
-        SELECT COUNT(*) AS count 
-        FROM thresholds 
-        WHERE name = 'global'
-      `;
-      
-      const checkResult = await executeQuery(checkQuery, [], { 
-        queryId: `${requestId}_check`, 
-        label: 'Check Thresholds Exist',
-        timeout: 5000 // Shorter timeout
-      });
-      
-      const exists = checkResult && checkResult.length > 0 && checkResult[0].count > 0;
-      logger.info(`[${requestId}] Threshold record exists: ${exists}`, {
-        requestId,
-        exists
-      });
-      
-      // Always insert a new record for versioning
-      const query = `
-        INSERT INTO thresholds 
-          (name, min_temp, max_temp, min_humidity, max_humidity, max_power_single_phase, max_power_three_phase)
-        VALUES
-          ('global', @param0, @param1, @param2, @param3, @param4, @param5)
-      `;
-      
-      const params = [
-        min_temp,
-        max_temp,
-        min_humidity,
-        max_humidity,
-        max_power_single_phase,
-        max_power_three_phase
-      ];
-      
-      logger.info(`[${requestId}] Executing direct insert query for thresholds`, {
-        requestId,
-        query,
-        params
-      });
-      
-      await executeQuery(query, params, { 
-        queryId: requestId, 
-        label: 'Create New Threshold Version',
-        timeout: 5000 // Shorter timeout
-      });
-      
-      logger.info(`[${requestId}] Direct insert query completed successfully`, {
-        requestId
-      });
-    }
+    // Always create a new record for versioning
+    const query = `
+      INSERT INTO thresholds 
+        (name, min_temp, max_temp, min_humidity, max_humidity, max_power_single_phase, max_power_three_phase)
+      VALUES
+        ('global', @param0, @param1, @param2, @param3, @param4, @param5)
+    `;
+    
+    const params = [
+      min_temp,
+      max_temp,
+      min_humidity,
+      max_humidity,
+      max_power_single_phase,
+      max_power_three_phase
+    ];
+    
+    logger.info(`[${requestId}] Executing direct insert query for thresholds`, {
+      requestId,
+      query,
+      params
+    });
+    
+    await executeQuery(query, params, { 
+      queryId: requestId, 
+      label: 'Create New Threshold Version',
+      timeout: 3000 // Shorter timeout for insert
+    });
     
     logger.info(`[${requestId}] Thresholds update successful`, {
       requestId
