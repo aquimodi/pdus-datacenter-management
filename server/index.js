@@ -407,7 +407,7 @@ async function checkApiEndpoints() {
     });
     
     if (!api1Reachable) {
-      logger.warn('API1 is not reachable. Will use mock data as fallback when needed.');
+      logger.warn('API1 is not reachable. Using database data if available.');
     }
   } catch (error) {
     logger.error(`Error checking API1:`, {
@@ -427,7 +427,7 @@ async function checkApiEndpoints() {
     });
     
     if (!api2Reachable) {
-      logger.warn('API2 is not reachable. Will use mock data as fallback when needed.');
+      logger.warn('API2 is not reachable. Using database data if available.');
     }
   } catch (error) {
     logger.error(`Error checking API2:`, {
@@ -458,7 +458,7 @@ async function checkDatabaseConnection() {
     });
     
     if (!dbConnected) {
-      logger.warn(`Database connection failed. Will use API or mock data as fallback.`);
+      logger.warn(`Database connection failed. Will use API data as fallback.`);
     }
   } catch (error) {
     logger.error(`Error checking database connection:`, {

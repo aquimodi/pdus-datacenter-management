@@ -270,7 +270,9 @@ export const executeQuery = async (query, params = [], options = {}) => {
     }
     
     // Set timeout for this specific request
-    const timeout = options.timeout || 10000;
+    // IMPORTANT: Reduce timeout for thresholds queries to prevent hanging
+    const timeout = options.timeout || 
+                   (query.toLowerCase().includes('threshold') ? 5000 : 10000);
     request.timeout = timeout;
     logger.debug(`Set request timeout to ${timeout}ms`, { queryId });
     
@@ -459,7 +461,8 @@ export const getRacks = async () => {
   try {
     const result = await executeQuery(query, [], { 
       queryId, 
-      label: 'Get All Racks' 
+      label: 'Get All Racks',
+      timeout: 8000 // Added explicit timeout
     });
     logger.info(`Successfully retrieved ${result.length} racks`, { queryId });
     
@@ -510,7 +513,8 @@ export const getSensorReadings = async () => {
   try {
     const result = await executeQuery(query, [], { 
       queryId, 
-      label: 'Get Recent Sensor Readings' 
+      label: 'Get Recent Sensor Readings',
+      timeout: 8000 // Added explicit timeout
     });
     logger.info(`Successfully retrieved ${result.length} sensor readings`, { queryId });
     
@@ -543,29 +547,55 @@ export const getProblems = async (isHistorical = false) => {
   const queryId = `getProblems_${Date.now()}`;
   logger.info(`Fetching ${isHistorical ? 'historical' : 'current'} problems data`, { queryId });
   
-  const query = `
-    SELECT 
-      p.id,
-      r.name AS rack,
-      r.site,
-      r.datacenter AS dc,
-      p.type,
-      p.value,
-      p.threshold,
-      p.alert_type,
-      p.created_at AS time,
-      p.resolved_at AS resolved,
-      p.status
-    FROM problems p
-    JOIN racks r ON r.id = p.rack_id
-    WHERE p.status = ${isHistorical ? "'resolved'" : "'active'"}
-    ORDER BY p.created_at DESC
-  `;
-  
   try {
+    // Try to use stored procedures first (more efficient and reliable)
+    const spName = isHistorical ? 'sp_get_historical_problems' : 'sp_get_active_problems';
+    logger.info(`Attempting to use stored procedure: ${spName}`, { queryId });
+    
+    try {
+      const result = await executeQuery(`EXEC ${spName}`, [], {
+        queryId,
+        label: `Get ${isHistorical ? 'Historical' : 'Active'} Problems (SP)`,
+        timeout: 5000 // Short timeout for SPs
+      });
+      
+      if (result && result.length > 0) {
+        logger.info(`Successfully retrieved ${result.length} problems using stored procedure`, { queryId });
+        return result;
+      }
+      
+      logger.warn(`Stored procedure ${spName} returned no results, falling back to direct query`, { queryId });
+    } catch (spError) {
+      logger.warn(`Error using stored procedure ${spName}: ${spError.message}. Falling back to direct query.`, {
+        queryId,
+        error: spError.message
+      });
+    }
+    
+    // Fall back to direct query if SP fails
+    const query = `
+      SELECT 
+        p.id,
+        r.name AS rack,
+        r.site,
+        r.datacenter AS dc,
+        p.type,
+        p.value,
+        p.threshold,
+        p.alert_type,
+        p.created_at AS time,
+        p.resolved_at AS resolved,
+        p.status
+      FROM problems p
+      JOIN racks r ON r.id = p.rack_id
+      WHERE p.status = ${isHistorical ? "'resolved'" : "'active'"}
+      ORDER BY p.created_at DESC
+    `;
+    
     const result = await executeQuery(query, [], { 
       queryId, 
-      label: `Get ${isHistorical ? 'Historical' : 'Active'} Problems` 
+      label: `Get ${isHistorical ? 'Historical' : 'Active'} Problems (Direct Query)`,
+      timeout: 8000 // Added explicit timeout
     });
     logger.info(`Successfully retrieved ${result.length} ${isHistorical ? 'historical' : 'current'} problems from database`, { queryId });
     
@@ -582,8 +612,7 @@ export const getProblems = async (isHistorical = false) => {
   } catch (error) {
     logger.error(`Failed to fetch ${isHistorical ? 'historical' : 'current'} problems`, { 
       queryId, 
-      error: error.message,
-      query 
+      error: error.message
     });
     return [];
   }
@@ -614,24 +643,52 @@ export const getThresholds = async () => {
   logger.info(`Fetching threshold values`, { queryId });
   
   try {
-    // Try calling the stored procedure first
+    // Try using the view first (most efficient)
     try {
+      logger.info(`Trying to fetch thresholds from vw_current_thresholds view`, { queryId });
+      const viewResult = await executeQuery(
+        "SELECT * FROM vw_current_thresholds WHERE name = 'global'", 
+        [], 
+        { 
+          queryId: `${queryId}_view`, 
+          label: 'Get Thresholds (View)',
+          timeout: 3000 // Very short timeout for view
+        }
+      );
+      
+      if (viewResult && viewResult.length > 0) {
+        logger.info(`Successfully retrieved thresholds using view`, { queryId });
+        return viewResult;
+      }
+      
+      logger.warn(`View returned no thresholds, trying stored procedure`, { queryId });
+    } catch (viewError) {
+      logger.warn(`Failed to fetch thresholds using view: ${viewError.message}. Trying stored procedure.`, { queryId });
+    }
+    
+    // Try calling the stored procedure next
+    try {
+      logger.info(`Trying to fetch thresholds using sp_get_thresholds stored procedure`, { queryId });
       const result = await executeQuery("EXEC sp_get_thresholds", [], { 
         queryId, 
-        label: 'Get Thresholds (SP)' 
+        label: 'Get Thresholds (SP)', 
+        timeout: 5000 // Short timeout for SP
       });
       
       if (result && result.length > 0) {
         logger.info(`Successfully retrieved thresholds using stored procedure`, { queryId });
         return result;
       }
+      
+      logger.warn(`Stored procedure returned no thresholds, falling back to direct query`, { queryId });
     } catch (spError) {
       logger.warn(`Failed to fetch thresholds using stored procedure: ${spError.message}. Falling back to direct query.`, { queryId });
     }
     
     // Fall back to direct query if stored procedure fails
+    logger.info(`Trying direct query to fetch thresholds`, { queryId });
     const query = `
-      SELECT 
+      SELECT TOP 1
         id,
         name,
         min_temp,
@@ -644,11 +701,13 @@ export const getThresholds = async () => {
         updated_at
       FROM thresholds
       WHERE name = 'global'
+      ORDER BY created_at DESC
     `;
     
     const result = await executeQuery(query, [], { 
       queryId, 
-      label: 'Get Thresholds (Direct Query)' 
+      label: 'Get Thresholds (Direct Query)',
+      timeout: 5000 // Short timeout
     });
     
     if (result.length === 0) {
@@ -681,67 +740,30 @@ export const updateThresholds = async (thresholds) => {
   });
   
   try {
-    // First check if record exists
-    const checkQuery = "SELECT COUNT(*) AS count FROM thresholds WHERE name = 'global'";
-    const checkResult = await executeQuery(checkQuery, [], { 
-      queryId: `${queryId}_check`, 
-      label: 'Check Thresholds Exist' 
-    });
+    // Create a new threshold record (for versioning)
+    const query = `
+      INSERT INTO thresholds 
+        (name, min_temp, max_temp, min_humidity, max_humidity, max_power_single_phase, max_power_three_phase)
+      VALUES
+        ('global', @param0, @param1, @param2, @param3, @param4, @param5)
+    `;
     
-    const exists = checkResult && checkResult.length > 0 && checkResult[0].count > 0;
-    logger.debug(`Thresholds record exists: ${exists}`, { queryId });
-    
-    let query;
-    let params;
-    
-    if (exists) {
-      // Update existing record
-      query = `
-        UPDATE thresholds
-        SET
-          min_temp = @param0,
-          max_temp = @param1,
-          min_humidity = @param2,
-          max_humidity = @param3,
-          max_power_single_phase = @param4,
-          max_power_three_phase = @param5,
-          updated_at = GETDATE()
-        WHERE name = 'global'
-      `;
-      
-      params = [
-        thresholds.min_temp,
-        thresholds.max_temp,
-        thresholds.min_humidity,
-        thresholds.max_humidity,
-        thresholds.max_power_single_phase,
-        thresholds.max_power_three_phase
-      ];
-    } else {
-      // Insert new record
-      query = `
-        INSERT INTO thresholds 
-          (name, min_temp, max_temp, min_humidity, max_humidity, max_power_single_phase, max_power_three_phase)
-        VALUES
-          ('global', @param0, @param1, @param2, @param3, @param4, @param5)
-      `;
-      
-      params = [
-        thresholds.min_temp,
-        thresholds.max_temp,
-        thresholds.min_humidity,
-        thresholds.max_humidity,
-        thresholds.max_power_single_phase,
-        thresholds.max_power_three_phase
-      ];
-    }
+    const params = [
+      thresholds.min_temp,
+      thresholds.max_temp,
+      thresholds.min_humidity,
+      thresholds.max_humidity,
+      thresholds.max_power_single_phase,
+      thresholds.max_power_three_phase
+    ];
     
     await executeQuery(query, params, { 
       queryId, 
-      label: 'Update Thresholds'
+      label: 'Create New Threshold Version',
+      timeout: 5000 // Short timeout for insert
     });
     
-    logger.info(`Successfully updated thresholds`, { queryId });
+    logger.info(`Successfully created new threshold version`, { queryId });
     return true;
   } catch (error) {
     logger.error(`Failed to update thresholds`, { 
