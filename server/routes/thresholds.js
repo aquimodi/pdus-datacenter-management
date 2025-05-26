@@ -30,32 +30,153 @@ router.get('/', async (req, res) => {
       requestId
     });
     
-    // First try using the getThresholds function from db.js
+    // First try using the fast SP directly
     let data;
     try {
-      logger.info(`[${requestId}] Attempting to fetch thresholds using getThresholds function`, {
+      logger.info(`[${requestId}] Attempting to fetch thresholds using fast stored procedure`, {
         requestId
       });
       
-      const startQueryTime = Date.now();
-      data = await getThresholds();
-      const queryDuration = Date.now() - startQueryTime;
+      const fastStartTime = Date.now();
+      data = await executeQuery("EXEC sp_get_thresholds_fast", [], {
+        queryId: `${requestId}_fast_sp`,
+        label: 'Get Thresholds Fast SP',
+        timeout: 3000 // Very short timeout
+      });
       
-      logger.info(`[${requestId}] getThresholds executed in ${queryDuration}ms`, {
+      const fastDuration = Date.now() - fastStartTime;
+      logger.info(`[${requestId}] Fast SP executed in ${fastDuration}ms`, {
         requestId,
-        duration: queryDuration,
+        duration: fastDuration,
         success: !!data && data.length > 0,
         resultCount: data ? data.length : 0
       });
-    } catch (functionError) {
-      logger.error(`[${requestId}] Error using getThresholds function: ${functionError.message}`, {
+      
+      if (data && data.length > 0) {
+        logger.info(`[${requestId}] Successfully retrieved thresholds using fast SP`, {
+          requestId
+        });
+        
+        const response = {
+          status: "Success",
+          data: data
+        };
+        
+        const responseTime = Date.now() - startTime;
+        res.set('X-Debug-Id', requestId);
+        res.set('X-Debug-Time', `${responseTime}ms`);
+        
+        logger.info(`[${requestId}] Sending thresholds response (fast path), total time: ${responseTime}ms`, {
+          requestId,
+          responseTime
+        });
+        
+        return res.status(200).json(response);
+      }
+    } catch (fastSpError) {
+      logger.warn(`[${requestId}] Fast SP failed: ${fastSpError.message}, trying fallback methods`, {
         requestId,
-        error: functionError.message,
-        stack: functionError.stack
+        error: fastSpError.message
+      });
+    }
+    
+    // Try using the view directly
+    try {
+      logger.info(`[${requestId}] Attempting to fetch thresholds using view`, {
+        requestId
       });
       
-      // Fall back to direct query with a shorter timeout
-      logger.info(`[${requestId}] Falling back to direct query with shorter timeout`, {
+      const viewStartTime = Date.now();
+      data = await executeQuery(
+        "SELECT * FROM vw_current_thresholds WHERE name = 'global'", 
+        [], 
+        { 
+          queryId: `${requestId}_view`, 
+          label: 'Get Thresholds (View)',
+          timeout: 3000 // Very short timeout for view
+        }
+      );
+      
+      const viewDuration = Date.now() - viewStartTime;
+      logger.info(`[${requestId}] View query executed in ${viewDuration}ms`, {
+        requestId,
+        duration: viewDuration,
+        success: !!data && data.length > 0,
+        resultCount: data ? data.length : 0
+      });
+      
+      if (data && data.length > 0) {
+        logger.info(`[${requestId}] Successfully retrieved thresholds using view`, {
+          requestId
+        });
+        
+        const response = {
+          status: "Success",
+          data: data
+        };
+        
+        const responseTime = Date.now() - startTime;
+        res.set('X-Debug-Id', requestId);
+        res.set('X-Debug-Time', `${responseTime}ms`);
+        
+        logger.info(`[${requestId}] Sending thresholds response (view path), total time: ${responseTime}ms`, {
+          requestId,
+          responseTime
+        });
+        
+        return res.status(200).json(response);
+      } else {
+        logger.warn(`[${requestId}] View returned no thresholds, trying regular stored procedure`, {
+          requestId
+        });
+      }
+    } catch (viewError) {
+      logger.warn(`[${requestId}] View query failed: ${viewError.message}, trying standard SP`, {
+        requestId,
+        error: viewError.message
+      });
+    }
+    
+    // Try using the regular SP
+    try {
+      logger.info(`[${requestId}] Attempting to fetch thresholds using standard stored procedure`, {
+        requestId
+      });
+      
+      const spStartTime = Date.now();
+      data = await executeQuery("EXEC sp_get_thresholds", [], {
+        queryId: `${requestId}_standard_sp`,
+        label: 'Get Thresholds Standard SP',
+        timeout: 3000 // Short timeout for SP
+      });
+      
+      const spDuration = Date.now() - spStartTime;
+      logger.info(`[${requestId}] Standard SP executed in ${spDuration}ms`, {
+        requestId,
+        duration: spDuration,
+        success: !!data && data.length > 0,
+        resultCount: data ? data.length : 0
+      });
+      
+      if (data && data.length > 0) {
+        logger.info(`[${requestId}] Successfully retrieved thresholds using standard SP`, {
+          requestId
+        });
+      } else {
+        logger.warn(`[${requestId}] Standard SP returned no thresholds, trying direct query`, {
+          requestId
+        });
+      }
+    } catch (spError) {
+      logger.warn(`[${requestId}] Standard SP failed: ${spError.message}, trying direct query`, {
+        requestId,
+        error: spError.message
+      });
+    }
+    
+    // If still no data, try direct query as last resort
+    if (!data || data.length === 0) {
+      logger.info(`[${requestId}] Trying direct query as last resort`, {
         requestId
       });
       
@@ -71,77 +192,45 @@ router.get('/', async (req, res) => {
           max_power_three_phase,
           created_at,
           updated_at
-        FROM thresholds
+        FROM thresholds WITH (NOLOCK)
         WHERE name = 'global'
-        ORDER BY updated_at DESC
+        ORDER BY created_at DESC
       `;
       
-      const startDirectQueryTime = Date.now();
+      const directStartTime = Date.now();
       try {
         data = await executeQuery(query, [], { 
-          queryId: requestId, 
-          label: 'Get Thresholds Direct', 
-          timeout: 3000 // Reduced timeout to 3 seconds
+          queryId: `${requestId}_direct`, 
+          label: 'Get Thresholds Direct Query',
+          timeout: 3000 // Short timeout
         });
         
-        const directQueryDuration = Date.now() - startDirectQueryTime;
-        logger.info(`[${requestId}] Direct query executed in ${directQueryDuration}ms`, {
+        const directDuration = Date.now() - directStartTime;
+        logger.info(`[${requestId}] Direct query executed in ${directDuration}ms`, {
           requestId,
-          duration: directQueryDuration,
+          duration: directDuration,
           success: !!data && data.length > 0,
           resultCount: data ? data.length : 0
         });
-      } catch (directQueryError) {
-        logger.error(`[${requestId}] Direct query also failed: ${directQueryError.message}`, {
+      } catch (directError) {
+        logger.error(`[${requestId}] Direct query also failed: ${directError.message}`, {
           requestId,
-          error: directQueryError.message,
-          stack: directQueryError.stack
+          error: directError.message,
+          stack: directError.stack
         });
-        throw directQueryError;
-      }
-    }
-    
-    // If no data, try with stored procedure
-    if (!data || data.length === 0) {
-      logger.info(`[${requestId}] No thresholds found, trying stored procedure`, {
-        requestId
-      });
-      
-      try {
-        const spStartTime = Date.now();
-        data = await executeQuery("EXEC sp_get_thresholds", [], {
-          queryId: requestId,
-          label: 'Get Thresholds SP',
-          timeout: 3000 // Reduced timeout to 3 seconds
-        });
-        
-        const spDuration = Date.now() - spStartTime;
-        logger.info(`[${requestId}] Stored procedure executed in ${spDuration}ms`, {
-          requestId,
-          duration: spDuration,
-          success: !!data && data.length > 0,
-          resultCount: data ? data.length : 0
-        });
-      } catch (spError) {
-        logger.error(`[${requestId}] Stored procedure failed: ${spError.message}`, {
-          requestId,
-          error: spError.message,
-          stack: spError.stack
-        });
-        
-        // Don't throw, continue with default values
+        throw directError;
       }
     }
     
     // If still no data, return default values
     if (!data || data.length === 0) {
-      logger.warn(`[${requestId}] No thresholds found, returning defaults`, {
+      logger.warn(`[${requestId}] All database attempts failed, returning default thresholds`, {
         requestId
       });
       
       data = [{
-        id: null,
-        name: 'global',
+        id: "default-threshold-id",
+        name: "global",
         min_temp: 18.0,
         max_temp: 32.0,
         min_humidity: 40.0,
@@ -277,6 +366,47 @@ router.put('/', async (req, res) => {
       }
     });
     
+    // Try using the stored procedure first for better performance
+    try {
+      logger.info(`[${requestId}] Attempting to update thresholds using stored procedure`, {
+        requestId
+      });
+      
+      const spStartTime = Date.now();
+      await executeQuery(
+        "EXEC sp_update_thresholds @param0, @param1, @param2, @param3, @param4, @param5", 
+        [min_temp, max_temp, min_humidity, max_humidity, max_power_single_phase, max_power_three_phase], 
+        { 
+          queryId: requestId, 
+          label: 'Update Thresholds SP',
+          timeout: 3000 // Short timeout
+        }
+      );
+      
+      const spDuration = Date.now() - spStartTime;
+      logger.info(`[${requestId}] Thresholds updated successfully via SP in ${spDuration}ms`, {
+        requestId,
+        duration: spDuration
+      });
+      
+      const response = {
+        status: "Success",
+        message: "Thresholds updated successfully"
+      };
+      
+      const responseTime = Date.now() - startTime;
+      res.set('X-Debug-Id', requestId);
+      res.set('X-Debug-Time', `${responseTime}ms`);
+      
+      return res.status(200).json(response);
+    } catch (spError) {
+      logger.warn(`[${requestId}] Stored procedure update failed: ${spError.message}, trying direct query`, {
+        requestId,
+        error: spError.message
+      });
+    }
+    
+    // Fall back to direct query if SP fails
     // Always create a new record for versioning
     const query = `
       INSERT INTO thresholds 
@@ -296,19 +426,44 @@ router.put('/', async (req, res) => {
     
     logger.info(`[${requestId}] Executing direct insert query for thresholds`, {
       requestId,
-      query,
       params
     });
     
+    const directStartTime = Date.now();
     await executeQuery(query, params, { 
       queryId: requestId, 
       label: 'Create New Threshold Version',
       timeout: 3000 // Shorter timeout for insert
     });
     
-    logger.info(`[${requestId}] Thresholds update successful`, {
-      requestId
+    const directDuration = Date.now() - directStartTime;
+    logger.info(`[${requestId}] Thresholds update successful via direct query in ${directDuration}ms`, {
+      requestId,
+      duration: directDuration
     });
+    
+    // Run the cleanup procedure to remove old threshold records
+    try {
+      logger.info(`[${requestId}] Running cleanup procedure to remove old threshold versions`, {
+        requestId
+      });
+      
+      await executeQuery("EXEC sp_purge_old_thresholds 10", [], {
+        queryId: `${requestId}_cleanup`,
+        label: 'Cleanup Old Thresholds',
+        timeout: 2000 // Very short timeout
+      });
+      
+      logger.info(`[${requestId}] Old threshold versions cleaned up`, {
+        requestId
+      });
+    } catch (cleanupError) {
+      // Non-fatal error, just log it
+      logger.warn(`[${requestId}] Threshold cleanup failed: ${cleanupError.message}`, {
+        requestId,
+        error: cleanupError.message
+      });
+    }
     
     const response = {
       status: "Success",
@@ -318,6 +473,11 @@ router.put('/', async (req, res) => {
     const responseTime = Date.now() - startTime;
     res.set('X-Debug-Id', requestId);
     res.set('X-Debug-Time', `${responseTime}ms`);
+    
+    logger.info(`[${requestId}] Sending successful threshold update response, total time: ${responseTime}ms`, {
+      requestId,
+      responseTime
+    });
     
     res.status(200).json(response);
   } catch (error) {
