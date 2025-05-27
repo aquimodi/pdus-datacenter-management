@@ -5,7 +5,7 @@ module.exports = {
     env: {
       NODE_ENV: "production",
       SERVE_FRONTEND: "false",  // Set to 'false' for backend-only server
-      BIND_ADDRESS: "IP_DE_LA_INTERFAZ_DE_SERVICIO" // Replace with actual service IP
+      BIND_ADDRESS: "0.0.0.0" // Bind to all available network interfaces to allow external connections
     },
     instances: 1,
     autorestart: true,
@@ -22,7 +22,7 @@ module.exports = {
     env_production: {
       NODE_ENV: "production",
       SERVE_FRONTEND: "false",  // Set to 'false' for backend-only server
-      BIND_ADDRESS: "IP_DE_LA_INTERFAZ_DE_SERVICIO" // Replace with actual service IP
+      BIND_ADDRESS: "0.0.0.0" // Bind to all available network interfaces to allow external connections
     }
   }]
 };

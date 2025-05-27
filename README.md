@@ -23,7 +23,7 @@ Frontend and backend run on different servers.
 
 #### Backend Server:
 1. Set `SERVE_FRONTEND=false` in `server/.env`
-2. Set `BIND_ADDRESS` to the server's service IP in `server/.env` and `ecosystem.config.cjs`
+2. Set `BIND_ADDRESS=0.0.0.0` in `server/.env` and `ecosystem.config.cjs` to allow external connections
 3. Start the backend using PM2: `npm run start:pm2`
 
 #### Frontend Server:
@@ -57,10 +57,14 @@ Copy the example environment files and update them with your actual configuratio
 
 ```
 copy .env.example .env
-copy server.env.example server/.env
+copy server/.env.example server/.env
 ```
 
 Edit both `.env` and `server/.env` files to set the correct database credentials and other configuration options.
+
+For multi-server deployment:
+- Frontend server `.env`: Set `VITE_LOCAL_SERVER_URL` to the backend server's IP/domain with port (e.g., `http://backend-server-ip:3000`)
+- Backend server `server/.env`: Set `SERVE_FRONTEND=false` and `BIND_ADDRESS=0.0.0.0`
 
 #### 4. Build the Frontend
 
