@@ -18,9 +18,9 @@ const sqlConfig = {
   port: Number(process.env.SQL_PORT) || 1433,
   options: {
     encrypt: process.env.SQL_ENCRYPT === 'false' ? false : true,
-    trustServerCertificate: true,
-    connectTimeout: 15000,  
-    requestTimeout: 15000,  
+    trustServerCertificate: process.env.SQL_TRUST_SERVER_CERTIFICATE === 'true' ? true : false,
+    connectTimeout: Number(process.env.SQL_CONNECTION_TIMEOUT) || 15000,
+    requestTimeout: Number(process.env.SQL_REQUEST_TIMEOUT) || 15000,
     connectionRetryAttempts: 2,
     connectionRetryInterval: 1000
   },
@@ -213,7 +213,7 @@ export const executeQuery = async (query, params = [], options = {}) => {
     return [];
   }
   
-  logger.dbQuery(`Executing SQL query: ${label}`, { 
+  logger.debug(`Executing SQL query: ${label}`, { 
     queryId,
     query,
     params: params.map((p, i) => ({ 
@@ -288,7 +288,7 @@ export const executeQuery = async (query, params = [], options = {}) => {
     const result = await Promise.race([queryPromise, timeoutPromise]);
     
     const duration = Date.now() - startTime;
-    logger.dbQuery(`Query executed successfully: ${label}`, { 
+    logger.debug(`Query executed successfully: ${label}`, { 
       queryId, 
       duration: `${duration}ms`, 
       rowCount: result.recordset ? result.recordset.length : 0,
@@ -298,8 +298,7 @@ export const executeQuery = async (query, params = [], options = {}) => {
     return result.recordset || [];
   } catch (err) {
     const duration = Date.now() - startTime;
-    logger.dbError(`Database query error: ${label}`, err, query);
-    logger.error(`Query failed after ${duration}ms: ${label}`, { 
+    logger.error(`Database query error: ${label}`, { 
       queryId, 
       duration: `${duration}ms`,
       error: err.message,

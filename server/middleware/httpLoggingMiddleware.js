@@ -19,10 +19,10 @@ if (!fs.existsSync(httpLogDir)) {
   }
 }
 
-// Reduced maximum size for request/response body logging (reduced from 64KB to 32KB)
+// Maximum size for request/response body logging (32KB)
 const MAX_BODY_SIZE = 32 * 1024;
 
-// Safely write data to a file with proper error handling - using writeFile instead of writeFileSync
+// Safely write data to a file with proper error handling
 const safeWriteFile = (filePath, data) => {
   try {
     // Convert data to string if it's an object
@@ -76,7 +76,7 @@ const safeStringify = (obj) => {
   }
 };
 
-// Convert buffer to string safely - completely rewritten to avoid detached ArrayBuffer issues
+// Convert buffer to string safely
 const safeBufferToString = (buffer, encoding = 'utf8') => {
   if (!buffer) return '';
   
@@ -117,16 +117,17 @@ const safeBufferToString = (buffer, encoding = 'utf8') => {
  */
 export const httpLoggingMiddleware = (req, res, next) => {
   try {
-    const requestId = req.requestId || req.headers['x-request-id'] || uuidv4();
+    // Generate a unique ID for this request if it doesn't have one
+    const requestId = req.headers['x-request-id'] || uuidv4();
     req.requestId = requestId;
     
     // Add request ID to response headers
     res.set('X-Request-ID', requestId);
     
-    // Record start time if not already set
-    req.startTime = req.startTime || Date.now();
+    // Record start time
+    req.startTime = Date.now();
 
-    // Create request log file path (but don't write yet)
+    // Create request log file path
     const timestamp = new Date().toISOString().replace(/:/g, '-');
     const reqLogFile = join(httpLogDir, `req_${requestId}_${timestamp}.json`);
     const resLogFile = join(httpLogDir, `res_${requestId}_${timestamp}.json`);
@@ -143,23 +144,19 @@ export const httpLoggingMiddleware = (req, res, next) => {
           safeBody = safeBufferToString(req.body);
         } else if (typeof req.body === 'object') {
           // Handle object bodies without JSON stringifying twice
-          try {
-            safeBody = {};
-            // Shallow copy keys to avoid reference issues
-            for (const key in req.body) {
-              const val = req.body[key];
-              if (typeof val === 'string' && val.length > MAX_BODY_SIZE) {
-                safeBody[key] = val.substring(0, MAX_BODY_SIZE) + '... [truncated]';
-              } else if (Buffer.isBuffer(val)) {
-                safeBody[key] = safeBufferToString(val);
-              } else if (typeof val === 'object' && val !== null) {
-                safeBody[key] = '[Object]';
-              } else {
-                safeBody[key] = val;
-              }
+          safeBody = {};
+          // Shallow copy keys to avoid reference issues
+          for (const key in req.body) {
+            const val = req.body[key];
+            if (typeof val === 'string' && val.length > MAX_BODY_SIZE) {
+              safeBody[key] = val.substring(0, MAX_BODY_SIZE) + '... [truncated]';
+            } else if (Buffer.isBuffer(val)) {
+              safeBody[key] = safeBufferToString(val);
+            } else if (typeof val === 'object' && val !== null) {
+              safeBody[key] = '[Object]';
+            } else {
+              safeBody[key] = val;
             }
-          } catch (e) {
-            safeBody = '[Error creating safe copy of request body]';
           }
         } else {
           // Handle primitive types
@@ -193,14 +190,13 @@ export const httpLoggingMiddleware = (req, res, next) => {
     // Write request to file asynchronously with safe handling
     safeWriteFile(reqLogFile, requestDetails);
     
-    logger.info(`HTTP Request [${requestId}]: ${req.method} ${req.originalUrl} from ${req.ip}`, {
+    logger.http(`HTTP Request [${requestId}]: ${req.method} ${req.originalUrl} from ${req.ip}`, {
       requestId,
       method: req.method,
-      url: req.originalUrl
-      // Reduced logging payload to avoid memory issues
+      url: req.originalUrl,
+      ip: req.ip
     });
 
-    // Use a safer approach for response capturing
     // Store response body as limited-size strings instead of chunks of buffers
     let responseText = '';
     let responseSizeLimit = MAX_BODY_SIZE;
@@ -346,14 +342,17 @@ export const httpLoggingMiddleware = (req, res, next) => {
         // Write response to file safely and asynchronously
         safeWriteFile(resLogFile, responseDetails);
         
-        // Log response summary with minimized data
-        logger.info(`HTTP Response [${requestId}]: ${req.method} ${req.originalUrl} ${res.statusCode} (${responseTime}ms)`, {
+        // Log response summary
+        logger.http(`HTTP Response [${requestId}]: ${req.method} ${req.originalUrl} ${res.statusCode} (${responseTime}ms)`, {
           requestId,
           method: req.method,
           url: req.originalUrl,
           status: res.statusCode,
-          responseTime
-          // Removed detailed data to reduce memory pressure
+          responseTime,
+          contentType: res.getHeader('content-type'),
+          contentLength: res.getHeader('content-length'),
+          actualSize: responseSize,
+          truncated: responseExceededLimit
         });
         
         // Clear captured response text to free memory

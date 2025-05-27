@@ -17,7 +17,7 @@ import { loggingMiddleware, errorLoggingMiddleware } from './middleware/loggingM
 import { httpLoggingMiddleware } from './middleware/httpLoggingMiddleware.js';
 import { isApiReachable, getCircuitBreakerStatus } from './utils/api.js';
 import { pingDatabase, initializePool, dbEnabled } from './config/db.js';
-import { checkDatabaseEnv, applyDatabaseSafeguards } from './utils/dbInit.js';
+import { checkDatabaseEnv } from './utils/dbInit.js';
 import monitoringService from './services/monitoringService.js';
 
 // Setup file paths
@@ -62,7 +62,7 @@ const corsOptions = {
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Debug', 'X-Request-ID', 'Accept', 'Origin', 'X-Requested-With'],
   exposedHeaders: ['X-Debug-Id', 'X-Debug-Time', 'X-Debug-Path', 'X-Request-ID', 'Access-Control-Allow-Origin'],
-  credentials: false,
+  credentials: true,
   maxAge: 86400  // Cache preflight response for 24 hours
 };
 
@@ -101,27 +101,6 @@ try {
   app.use(morgan(':request-id :method :url :status :response-time ms'));
 }
 
-// Extended morgan format with request and response bodies when in development mode
-if (process.env.NODE_ENV !== 'production') {
-  app.use(morgan((tokens, req, res) => {
-    const log = [
-      tokens.requestId(req, res),
-      tokens.method(req, res),
-      tokens.url(req, res),
-      tokens.status(req, res),
-      tokens.responseTime(req, res), 'ms'
-    ].join(' ');
-    
-    // Add request and response bodies in development mode
-    const requestBody = req.body && Object.keys(req.body).length ? 
-      `\nRequest Body: ${JSON.stringify(req.body, null, 2)}` : '';
-    
-    // We can't easily get response body here, it's handled in httpLoggingMiddleware
-      
-    return `${log}${requestBody}`;
-  }));
-}
-
 // Express built-in middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -136,16 +115,6 @@ if (dbConfigEnabled) {
     .then(async (pool) => {
       if (pool) {
         logger.info('Database connection pool initialized successfully');
-        
-        // Apply SQL Server compatibility safeguards
-        try {
-          const dbModule = await import('./config/db.js');
-          await applyDatabaseSafeguards(dbModule.default || dbModule);
-        } catch (err) {
-          logger.warn('Failed to apply database safeguards:', {
-            error: err.message
-          });
-        }
       } else {
         logger.warn('Database connection pool initialization returned null. Some features may be unavailable.');
       }
@@ -355,6 +324,20 @@ if (process.env.NODE_ENV === 'production' && SERVE_FRONTEND) {
     res.sendFile(join(__dirname, '../dist/index.html'));
   });
 }
+
+// Add route to specifically test frontend-backend communication
+app.get('/api/communication-test', (req, res) => {
+  res.status(200).json({
+    status: 'Success',
+    message: 'Backend communication successful',
+    requestHeaders: req.headers,
+    timestamp: new Date(),
+    serverInfo: {
+      uptime: process.uptime(),
+      nodeVersion: process.version
+    }
+  });
+});
 
 // Start the server - use BIND_ADDRESS explicitly to bind to service IP
 const server = app.listen(PORT, process.env.BIND_ADDRESS || '0.0.0.0', () => {

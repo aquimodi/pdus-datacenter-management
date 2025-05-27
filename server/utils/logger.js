@@ -20,7 +20,7 @@ export const setupLogger = () => {
       // Safely stringify metadata with circular reference handling
       try {
         const seen = new WeakSet();
-        return JSON.stringify(metadata, (key, value) => {
+        metaStr = JSON.stringify(metadata, (key, value) => {
           // Skip problematic keys that often contain circular references
           if (key === 'socket' || key === '_handle' || key === '_events' || key === '_eventsCount') {
             return '[skipped]';
@@ -51,7 +51,7 @@ export const setupLogger = () => {
 
   // Create the logger with enhanced configuration
   const logger = winston.createLogger({
-    level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+    level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
     format: winston.format.combine(
       winston.format.timestamp({
         format: 'YYYY-MM-DD HH:mm:ss.SSS'
@@ -152,6 +152,18 @@ export const setupLogger = () => {
       // Monitoring log file - new file dedicated to monitoring activities
       new winston.transports.File({
         filename: join(logDir, 'monitoring.log'),
+        maxsize: 2 * 1024 * 1024, // 2MB
+        maxFiles: 3,
+        format: winston.format.combine(
+          winston.format.timestamp({
+            format: 'YYYY-MM-DD HH:mm:ss.SSS'
+          }),
+          detailedFormat
+        )
+      }),
+      // HTTP log file - specific for request/response logging
+      new winston.transports.File({
+        filename: join(logDir, 'http.log'),
         maxsize: 2 * 1024 * 1024, // 2MB
         maxFiles: 3,
         format: winston.format.combine(
@@ -266,6 +278,18 @@ export const setupLogger = () => {
       });
     } catch (error) {
       console.error(`Error in monitoring logger: ${error.message}`);
+    }
+  };
+
+  // New method for HTTP logs
+  logger.http = (message, data) => {
+    try {
+      logger.info(message, {
+        type: 'http',
+        ...(data || {})
+      });
+    } catch (error) {
+      console.error(`Error in http logger: ${error.message}`);
     }
   };
 

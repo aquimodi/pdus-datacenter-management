@@ -106,61 +106,6 @@ router.get('/status', async (req, res) => {
 });
 
 /**
- * @route POST /api/system/monitoring
- * @desc Control the monitoring service
- * @access Public
- */
-router.post('/monitoring', async (req, res) => {
-  const { action, interval } = req.body;
-  const requestId = req.requestId;
-  
-  logger.info(`Monitoring service control requested: ${action}`, { 
-    requestId,
-    action,
-    interval 
-  });
-  
-  try {
-    if (action === 'start') {
-      monitoringService.startMonitoring(interval || 300000);
-      res.status(200).json({
-        status: 'Success',
-        message: `Monitoring service started with interval of ${interval || 300000}ms`
-      });
-    } else if (action === 'stop') {
-      monitoringService.stopMonitoring();
-      res.status(200).json({
-        status: 'Success',
-        message: 'Monitoring service stopped'
-      });
-    } else if (action === 'run-now') {
-      await monitoringService.runMonitoringCycle();
-      res.status(200).json({
-        status: 'Success',
-        message: 'Monitoring cycle executed'
-      });
-    } else {
-      res.status(400).json({
-        status: 'Error',
-        message: 'Invalid action. Use "start", "stop", or "run-now".'
-      });
-    }
-  } catch (error) {
-    logger.error(`Error controlling monitoring service:`, {
-      requestId,
-      action,
-      error: error.message,
-      stack: error.stack
-    });
-    
-    res.status(500).json({
-      status: 'Error',
-      message: `Error controlling monitoring service: ${error.message}`
-    });
-  }
-});
-
-/**
  * @route GET /api/system/logs
  * @desc Get server logs
  * @access Public
@@ -177,7 +122,7 @@ router.get('/logs', async (req, res) => {
   
   try {
     // Validate the log type for security
-    const allowedLogTypes = ['combined', 'error', 'debug', 'api', 'access'];
+    const allowedLogTypes = ['combined', 'error', 'debug', 'api', 'access', 'http', 'monitoring'];
     if (!allowedLogTypes.includes(type)) {
       logger.warn(`Invalid log type requested: ${type}`, { requestId });
       return res.status(400).json({
@@ -240,6 +185,150 @@ router.get('/logs', async (req, res) => {
 });
 
 /**
+ * @route GET /api/system/http-logs
+ * @desc Get HTTP request/response logs
+ * @access Public
+ */
+router.get('/http-logs', async (req, res) => {
+  const { requestId: searchRequestId, limit = 20 } = req.query;
+  const requestId = req.requestId;
+  
+  try {
+    logger.info(`[${requestId}] Fetching HTTP logs`, {
+      requestId,
+      searchRequestId: searchRequestId,
+      limit
+    });
+    
+    // Ensure HTTP logs directory exists
+    const httpLogDir = join(LOG_DIR, 'http');
+    if (!fs.existsSync(httpLogDir)) {
+      logger.warn(`[${requestId}] HTTP log directory not found`, {
+        requestId,
+        dir: httpLogDir
+      });
+      
+      return res.status(404).json({
+        status: 'Error',
+        message: 'HTTP logs directory not found'
+      });
+    }
+    
+    // Read all log files in the directory
+    const files = fs.readdirSync(httpLogDir)
+      .filter(file => file.endsWith('.json'))
+      .sort((a, b) => {
+        // Sort by creation time (newest first)
+        return fs.statSync(join(httpLogDir, b)).mtime.getTime() - 
+               fs.statSync(join(httpLogDir, a)).mtime.getTime();
+      });
+    
+    // Filter by request ID if provided
+    const filteredFiles = searchRequestId 
+      ? files.filter(file => file.includes(searchRequestId))
+      : files.slice(0, parseInt(limit) * 2); // *2 because each request has req and res files
+    
+    logger.debug(`[${requestId}] Found ${filteredFiles.length} log files`, {
+      requestId,
+      fileCount: filteredFiles.length
+    });
+    
+    // Process files to pair requests with responses
+    const logs = [];
+    const processedRequestIds = new Set();
+    
+    for (const file of filteredFiles) {
+      try {
+        const filePath = join(httpLogDir, file);
+        const content = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        
+        // Check if we already processed this request ID
+        if (processedRequestIds.has(content.id)) {
+          continue;
+        }
+        
+        // Find the matching request/response pair
+        const isRequest = file.startsWith('req_');
+        const partnerId = content.id;
+        const partnerPrefix = isRequest ? 'res_' : 'req_';
+        
+        const partnerFile = files.find(f => f.startsWith(partnerPrefix) && f.includes(partnerId));
+        
+        if (partnerFile) {
+          const partnerFilePath = join(httpLogDir, partnerFile);
+          const partnerContent = JSON.parse(fs.readFileSync(partnerFilePath, 'utf8'));
+          
+          const requestContent = isRequest ? content : partnerContent;
+          const responseContent = isRequest ? partnerContent : content;
+          
+          logs.push({
+            id: partnerId,
+            timestamp: requestContent.timestamp,
+            method: requestContent.method,
+            url: requestContent.url,
+            statusCode: responseContent.status,
+            responseTime: responseContent.responseTime,
+            request: requestContent,
+            response: responseContent
+          });
+          
+          // Mark as processed
+          processedRequestIds.add(partnerId);
+        } else {
+          // If we can't find a partner, just add this one
+          logs.push({
+            id: content.id,
+            timestamp: content.timestamp,
+            method: isRequest ? content.method : 'Unknown',
+            url: isRequest ? content.url : 'Unknown',
+            statusCode: !isRequest ? content.status : 0,
+            responseTime: !isRequest ? content.responseTime : '0ms',
+            request: isRequest ? content : { id: content.id, message: 'Request log not found' },
+            response: !isRequest ? content : { id: content.id, message: 'Response log not found' }
+          });
+          
+          // Mark as processed
+          processedRequestIds.add(content.id);
+        }
+        
+        // Limit the number of logs
+        if (logs.length >= parseInt(limit)) {
+          break;
+        }
+      } catch (error) {
+        logger.error(`[${requestId}] Error reading log file ${file}:`, {
+          requestId,
+          error: error.message,
+          stack: error.stack
+        });
+      }
+    }
+    
+    logger.info(`[${requestId}] Returning ${logs.length} HTTP log entries`, {
+      requestId,
+      count: logs.length
+    });
+    
+    res.status(200).json({
+      status: 'Success',
+      count: logs.length,
+      logs: logs
+    });
+  } catch (error) {
+    logger.error(`[${requestId}] Error fetching HTTP logs`, {
+      requestId,
+      error: error.message,
+      stack: error.stack
+    });
+    
+    res.status(500).json({
+      status: 'Error',
+      message: `Error fetching HTTP logs: ${error.message}`
+    });
+  }
+});
+
+/**
  * @route GET /api/system/diagnose
  * @desc Run comprehensive diagnostics
  * @access Public
@@ -271,7 +360,6 @@ router.get('/diagnose', async (req, res) => {
     const serverStats = {
       uptime: process.uptime(),
       memoryUsage: process.memoryUsage(),
-      cpuUsage: process.cpuUsage(),
       platform: process.platform,
       arch: process.arch,
       nodeVersion: process.version,
@@ -335,6 +423,61 @@ router.get('/diagnose', async (req, res) => {
     res.status(500).json({
       status: 'Error',
       message: `Error running system diagnostics: ${error.message}`
+    });
+  }
+});
+
+/**
+ * @route GET /api/system/communication-test
+ * @desc Test frontend-backend communication
+ * @access Public
+ */
+router.get('/communication-test', (req, res) => {
+  const requestId = req.requestId;
+  const startTime = Date.now();
+  
+  logger.info(`Communication test requested`, { requestId });
+  
+  try {
+    // Gather system information for the response
+    const systemInfo = {
+      uptime: process.uptime(),
+      nodeVersion: process.version,
+      platform: process.platform,
+      arch: process.arch,
+      memoryUsage: {
+        rss: Math.round(process.memoryUsage().rss / 1024 / 1024) + 'MB',
+        heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + 'MB',
+        heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB'
+      }
+    };
+    
+    res.status(200).json({
+      status: 'Success',
+      message: 'Backend communication successful',
+      requestHeaders: req.headers,
+      requestTime: startTime,
+      responseTime: Date.now() - startTime,
+      timestamp: new Date(),
+      serverInfo: systemInfo,
+      environment: process.env.NODE_ENV,
+      serverPort: process.env.SERVER_PORT
+    });
+    
+    logger.info(`Communication test completed successfully`, { 
+      requestId,
+      responseTime: Date.now() - startTime
+    });
+  } catch (error) {
+    logger.error(`Error in communication test:`, {
+      requestId,
+      error: error.message,
+      stack: error.stack
+    });
+    
+    res.status(500).json({
+      status: 'Error',
+      message: `Error in communication test: ${error.message}`
     });
   }
 });

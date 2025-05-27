@@ -65,7 +65,38 @@ export const applyDatabaseSafeguards = async (db) => {
       return false;
     }
     
-    // Additional failsafe query execution
+    // Verify table existence
+    try {
+      const tablesResult = await db.executeQuery(`
+        SELECT TABLE_NAME 
+        FROM INFORMATION_SCHEMA.TABLES 
+        WHERE TABLE_TYPE = 'BASE TABLE' 
+        AND TABLE_SCHEMA = 'dbo'
+      `, [], {
+        queryId: 'check_tables',
+        label: 'Check Tables Existence',
+        timeout: 5000
+      });
+      
+      logger.info(`Found ${tablesResult.length} tables in database`);
+      
+      const requiredTables = ['racks', 'sensor_readings', 'problems', 'thresholds'];
+      const existingTables = tablesResult.map(t => t.TABLE_NAME.toLowerCase());
+      
+      const missingTables = requiredTables.filter(t => !existingTables.includes(t));
+      
+      if (missingTables.length > 0) {
+        logger.warn(`Missing required tables: ${missingTables.join(', ')}`);
+      } else {
+        logger.info('All required tables exist');
+      }
+    } catch (tablesError) {
+      logger.error('Error checking tables:', {
+        error: tablesError.message,
+        stack: tablesError.stack
+      });
+    }
+    
     return true;
   } catch (error) {
     logger.error('Error applying database safeguards:', {

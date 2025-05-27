@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { setupLogger } from './logger.js';
+import { mockSensorData } from '../data/mockData.js';
 
 const logger = setupLogger();
 
@@ -200,7 +201,7 @@ const fetchAllPages = async (baseUrl, requestConfig, requestId, pageSize = 50) =
   let hasMorePages = true;
   let totalRecords = 0;
   
-  logger.info(`Iniciando obtención de datos paginados desde OData API: ${baseUrl}`, {
+  logger.info(`Starting paginated data retrieval from OData API: ${baseUrl}`, {
     requestId,
     pageSize,
     initialPage: currentPage
@@ -210,7 +211,7 @@ const fetchAllPages = async (baseUrl, requestConfig, requestId, pageSize = 50) =
     const skip = currentPage * pageSize;
     const paginatedUrl = addODataPaginationParams(baseUrl, skip, pageSize);
     
-    logger.info(`Obteniendo página ${currentPage + 1} (skip=${skip}, top=${pageSize})`, {
+    logger.info(`Getting page ${currentPage + 1} (skip=${skip}, top=${pageSize})`, {
       requestId,
       url: paginatedUrl,
       page: currentPage + 1
@@ -221,7 +222,7 @@ const fetchAllPages = async (baseUrl, requestConfig, requestId, pageSize = 50) =
       const response = await axios.get(paginatedUrl, requestConfig);
       const duration = Date.now() - startTime;
       
-      logger.info(`Página ${currentPage + 1} obtenida en ${duration}ms con estado ${response.status}`, {
+      logger.info(`Page ${currentPage + 1} retrieved in ${duration}ms with status ${response.status}`, {
         requestId,
         page: currentPage + 1,
         duration,
@@ -241,7 +242,7 @@ const fetchAllPages = async (baseUrl, requestConfig, requestId, pageSize = 50) =
         // Check for OData metadata to get total count if available
         if (response.data['@odata.count']) {
           totalRecords = response.data['@odata.count'];
-          logger.info(`Total de registros según metadatos OData: ${totalRecords}`, {
+          logger.info(`Total records according to OData metadata: ${totalRecords}`, {
             requestId
           });
         }
@@ -249,7 +250,7 @@ const fetchAllPages = async (baseUrl, requestConfig, requestId, pageSize = 50) =
         // Custom format with 'data' property
         pageData = response.data.data;
       } else {
-        logger.warn(`Formato de respuesta desconocido en página ${currentPage + 1}`, {
+        logger.warn(`Unknown response format on page ${currentPage + 1}`, {
           requestId,
           page: currentPage + 1,
           dataType: typeof response.data,
@@ -262,7 +263,7 @@ const fetchAllPages = async (baseUrl, requestConfig, requestId, pageSize = 50) =
           for (const key in response.data) {
             if (Array.isArray(response.data[key])) {
               pageData = response.data[key];
-              logger.info(`Se extrajo array de datos de la propiedad "${key}"`, {
+              logger.info(`Extracted data array from "${key}" property`, {
                 requestId,
                 items: pageData.length
               });
@@ -274,7 +275,7 @@ const fetchAllPages = async (baseUrl, requestConfig, requestId, pageSize = 50) =
       
       // Track progress
       allResults.push(...pageData);
-      logger.info(`Progreso: ${allResults.length} registros obtenidos hasta ahora`, {
+      logger.info(`Progress: ${allResults.length} records obtained so far`, {
         requestId,
         page: currentPage + 1,
         pageRecords: pageData.length,
@@ -285,7 +286,7 @@ const fetchAllPages = async (baseUrl, requestConfig, requestId, pageSize = 50) =
       if (pageData.length < pageSize) {
         // We received fewer records than the page size, so we're likely at the end
         hasMorePages = false;
-        logger.info(`Fin de la paginación: última página contiene menos de ${pageSize} registros`, {
+        logger.info(`End of pagination: last page contains fewer than ${pageSize} records`, {
           requestId,
           records: pageData.length,
           totalRecords: allResults.length
@@ -293,12 +294,12 @@ const fetchAllPages = async (baseUrl, requestConfig, requestId, pageSize = 50) =
       } else if (totalRecords > 0 && allResults.length >= totalRecords) {
         // We've reached the total count according to OData metadata
         hasMorePages = false;
-        logger.info(`Fin de la paginación: se obtuvieron todos los ${totalRecords} registros`, {
+        logger.info(`End of pagination: retrieved all ${totalRecords} records`, {
           requestId
         });
       } else if (response.data && response.data['@odata.nextLink']) {
         // OData provides a next link - we could use it but for simplicity we'll stick with skip/top
-        logger.debug(`API proporciona nextLink para la paginación`, {
+        logger.debug(`API provides nextLink for pagination`, {
           requestId,
           nextLink: response.data['@odata.nextLink']
         });
@@ -311,7 +312,7 @@ const fetchAllPages = async (baseUrl, requestConfig, requestId, pageSize = 50) =
       // Safety check to prevent infinite loops - max 20 pages (1,000 records at 50 per page)
       // Reduced from 100 to 20 to avoid memory issues
       if (currentPage >= 20) {
-        logger.warn(`Límite de seguridad alcanzado: 20 páginas (${pageSize * 20} registros)`, {
+        logger.warn(`Safety limit reached: 20 pages (${pageSize * 20} records)`, {
           requestId
         });
         hasMorePages = false;
@@ -323,7 +324,7 @@ const fetchAllPages = async (baseUrl, requestConfig, requestId, pageSize = 50) =
       }
       
     } catch (error) {
-      logger.error(`Error obteniendo página ${currentPage + 1}: ${error.message}`, {
+      logger.error(`Error getting page ${currentPage + 1}: ${error.message}`, {
         requestId,
         page: currentPage + 1,
         error: error.message,
@@ -332,7 +333,7 @@ const fetchAllPages = async (baseUrl, requestConfig, requestId, pageSize = 50) =
       
       // If we've already fetched some data, return what we have
       if (allResults.length > 0) {
-        logger.warn(`Devolviendo ${allResults.length} registros obtenidos antes del error`, {
+        logger.warn(`Returning ${allResults.length} records obtained before the error`, {
           requestId
         });
         
@@ -344,7 +345,7 @@ const fetchAllPages = async (baseUrl, requestConfig, requestId, pageSize = 50) =
     }
   }
   
-  logger.info(`Completada la obtención paginada: ${allResults.length} registros totales`, {
+  logger.info(`Completed paginated retrieval: ${allResults.length} total records`, {
     requestId,
     pages: currentPage,
     totalRecords: allResults.length
@@ -360,7 +361,7 @@ const fetchAllPages = async (baseUrl, requestConfig, requestId, pageSize = 50) =
  * @param {Object} options - Additional options
  * @param {number} options.retries - Number of retries (default: 3)
  * @param {number} options.retryDelay - Delay between retries in ms (default: 1000)
- * @param {boolean} options.useMockOnFail - Whether to use mock data if all retries fail (default: true)
+ * @param {boolean} options.useMockOnFail - Whether to use mock data if all retries fail (default: false)
  * @param {boolean} options.useCircuitBreaker - Whether to use circuit breaker pattern (default: true)
  * @param {boolean} options.usePagination - Whether to use pagination for OData APIs (default: true)
  * @param {number} options.pageSize - Number of records per page for paginated requests (default: 50)
@@ -377,7 +378,7 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
   const {
     retries = 3,
     retryDelay = 1000,
-    useMockOnFail = false, // Changed default to false
+    useMockOnFail = false,
     useCircuitBreaker = true,
     usePagination = true,
     pageSize = 50, // Reduced page size
@@ -385,7 +386,7 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
     ...axiosOptions
   } = options;
   
-  logger.info(`Iniciando petición a API externa: ${source}`, {
+  logger.info(`Starting external API request: ${source}`, {
     requestId,
     url,
     source
@@ -399,10 +400,18 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
       source
     });
     
+    if (useMockOnFail) {
+      logger.info(`Using mock data for ${source} due to open circuit breaker`, {
+        requestId,
+        source
+      });
+      return source.includes('rack') ? mockSensorData : { status: "Success", data: [] };
+    }
+    
     throw new Error(`Service unavailable: ${source} API is currently unavailable (circuit open)`);
   }
 
-  logger.info(`Consultando datos de la API externa ${source}: ${url}`, { requestId });
+  logger.info(`Querying external API ${source}: ${url}`, { requestId });
   
   let lastError = null;
   
@@ -414,7 +423,7 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
       const jitter = Math.random() * 0.3 * expBackoff; // Add up to 30% jitter
       const delayWithJitter = expBackoff + jitter;
       
-      logger.info(`Reintento ${attempt}/${retries} para API ${source} tras ${Math.round(delayWithJitter)}ms`, {
+      logger.info(`Retry ${attempt}/${retries} for API ${source} after ${Math.round(delayWithJitter)}ms`, {
         requestId,
         attempt,
         maxRetries: retries,
@@ -438,19 +447,7 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
         timeout: 10000, // 10 second timeout
         validateStatus: status => {
           // Accept 2xx status codes and a few others that might be valid in some contexts
-          if (status >= 200 && status < 300) return true;
-          
-          // Handle specific non-standard status codes
-          if (status === 530) {
-            logger.warn(`Received FTP status code 530 (not logged in) from ${url}`, {
-              requestId,
-              url,
-              status
-            });
-            return false;
-          }
-          
-          return false;
+          return status >= 200 && status < 300;
         },
         ...axiosOptions
       };
@@ -458,25 +455,25 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
       // Add API key as Bearer token if available
       if (apiKey) {
         requestConfig.headers['Authorization'] = `Bearer ${apiKey}`;
-        logger.debug(`Añadida cabecera de autorización Bearer para ${source}`, {
+        logger.debug(`Added Bearer authorization header for ${source}`, {
           requestId
         });
       } else {
-        logger.debug(`No se encontró API key para ${source}`, {
+        logger.debug(`No API key found for ${source}`, {
           requestId
         });
       }
 
       // Log the detailed request configuration
       if (debug) {
-        logger.debug(`Configuración de la petición API para ${source}:`, {
+        logger.debug(`API request configuration for ${source}:`, {
           requestId,
           url,
           method: requestConfig.method || 'GET',
           timeout: requestConfig.timeout,
           headers: {
             ...requestConfig.headers,
-            Authorization: requestConfig.headers.Authorization ? '[REDACTADO]' : undefined
+            Authorization: requestConfig.headers.Authorization ? '[REDACTED]' : undefined
           }
         });
       }
@@ -486,13 +483,13 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
       const shouldUsePagination = usePagination && isOData;
       
       if (isOData) {
-        logger.info(`API detectada como OData: ${url}`, { 
+        logger.info(`API detected as OData: ${url}`, { 
           requestId, 
           usePagination: shouldUsePagination
         });
       }
 
-      logger.info(`Enviando petición ${requestConfig.method || 'GET'} a ${url}${shouldUsePagination ? ' (con paginación)' : ''}`, { 
+      logger.info(`Sending ${requestConfig.method || 'GET'} request to ${url}${shouldUsePagination ? ' (with pagination)' : ''}`, { 
         requestId,
         attempt: attempt + 1,
         maxRetries: retries + 1
@@ -510,7 +507,7 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
           const allPages = await fetchAllPages(url, requestConfig, requestId, pageSize);
           duration = Date.now() - startTime;
           
-          logger.info(`Petición paginada completada en ${duration}ms. Obtenidos ${allPages.length} registros totales.`, {
+          logger.info(`Paginated request completed in ${duration}ms. Retrieved ${allPages.length} total records.`, {
             requestId,
             duration,
             recordCount: allPages.length
@@ -523,7 +520,7 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
             data: allPages  // Return the combined array directly
           };
         } catch (paginationError) {
-          logger.error(`Error en petición paginada: ${paginationError.message}`, {
+          logger.error(`Error in paginated request: ${paginationError.message}`, {
             requestId,
             error: paginationError.message,
             code: paginationError.code
@@ -537,7 +534,7 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
         response = await axios.get(url, requestConfig);
         duration = Date.now() - startTime;
         
-        logger.info(`Respuesta recibida en ${duration}ms con estado ${response.status}`, {
+        logger.info(`Response received in ${duration}ms with status ${response.status}`, {
           requestId,
           duration,
           status: response.status,
@@ -548,17 +545,17 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
 
       // Enhanced validation of response structure
       if (!response || !response.data) {
-        logger.error(`Respuesta inválida o vacía recibida de la API ${source}`, {
+        logger.error(`Invalid or empty response received from ${source} API`, {
           requestId,
-          response: response ? 'Datos vacíos' : 'Sin respuesta'
+          response: response ? 'Empty data' : 'No response'
         });
         
-        throw new Error(`Respuesta inválida o vacía recibida de la API ${source}`);
+        throw new Error(`Invalid or empty response received from ${source} API`);
       }
 
       // New API format returns an array directly, not wrapped in a status object
       if (Array.isArray(response.data)) {
-        logger.info(`Datos obtenidos correctamente de la API ${source} en el intento ${attempt + 1}`, {
+        logger.info(`Data successfully retrieved from ${source} API on attempt ${attempt + 1}`, {
           requestId,
           itemCount: response.data.length,
           format: 'array'
@@ -570,12 +567,15 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
         }
         
         // For new API format, structure response as if it came from the old API
-        return response.data;
+        return {
+          status: "Success",
+          data: response.data
+        };
       }
       
       // Old API format with status wrapper
       if (response.data && response.data.status === "Success") {
-        logger.info(`Datos obtenidos correctamente de la API ${source} en el intento ${attempt + 1}`, {
+        logger.info(`Data successfully retrieved from ${source} API on attempt ${attempt + 1}`, {
           requestId,
           itemCount: response.data.data?.length,
           format: 'status-wrapper'
@@ -589,7 +589,7 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
         return response.data;
       } else {
         // Log the error details for debugging
-        const errorMsg = `Respuesta inválida de la API ${source}: ${JSON.stringify(response.data)}`;
+        const errorMsg = `Invalid response from ${source} API: ${JSON.stringify(response.data)}`;
         logger.error(errorMsg, {
           requestId,
           responseData: response.data
@@ -607,41 +607,21 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
     } catch (error) {
       lastError = error;
       
-      // Check if it's a status code 530 error
-      let statusCode = null;
-      if (error.response) {
-        statusCode = error.response.status;
-      } else if (error.message && error.message.includes('status code 530')) {
-        statusCode = 530;
-      }
-      
-      // Special handling for status code 530 (FTP not logged in)
-      if (statusCode === 530) {
-        logger.warn(`Received status code 530 from API ${source}. This may indicate an FTP authentication issue.`, {
-          requestId,
-          url,
-          error: error.message,
-          code: error.code
-        });
-        
-        // Continue with retry logic rather than failing immediately
-      } else {
-        // Log API call failure
-        logger.error(`Llamada API fallida: ${error.message}`, {
-          requestId,
-          url,
-          error: error.message,
-          code: error.code,
-          response: error.response ? {
-            status: error.response.status,
-            statusText: error.response.statusText
-          } : null
-        });
-      }
+      // Log API call failure
+      logger.error(`API call failed: ${error.message}`, {
+        requestId,
+        url,
+        error: error.message,
+        code: error.code,
+        response: error.response ? {
+          status: error.response.status,
+          statusText: error.response.statusText
+        } : null
+      });
 
       // Log detailed error information
       if (axios.isAxiosError(error)) {
-        logger.error(`Error al obtener datos de la API ${source} (intento ${attempt + 1}/${retries + 1}):`, {
+        logger.error(`Error retrieving data from ${source} API (attempt ${attempt + 1}/${retries + 1}):`, {
           requestId,
           message: error.message,
           code: error.code,
@@ -650,21 +630,21 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
 
         // Enhanced error logging for common issues
         if (error.code === 'ECONNABORTED') {
-          logger.error(`Tiempo de espera (${error.config?.timeout}ms) excedido para la API ${source}`, {
+          logger.error(`Timeout (${error.config?.timeout}ms) exceeded for ${source} API`, {
             requestId,
             timeout: error.config?.timeout
           });
         } else if (error.code === 'ECONNREFUSED') {
-          logger.error(`Conexión rechazada a la API ${source}. El servidor podría estar caído o inaccesible.`, {
+          logger.error(`Connection refused to ${source} API. Server might be down or unreachable.`, {
             requestId,
             url
           });
         } else if (error.response && error.response.status === 401) {
-          logger.error(`Autenticación fallida para la API ${source}. Comprobar API key.`, {
+          logger.error(`Authentication failed for ${source} API. Check API key.`, {
             requestId
           });
         } else if (error.response && error.response.status === 403) {
-          logger.error(`Acceso prohibido a la API ${source}. Comprobar permisos.`, {
+          logger.error(`Access forbidden to ${source} API. Check permissions.`, {
             requestId
           });
         }
@@ -674,7 +654,7 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
           circuitBreaker.recordFailure(url);
         }
       } else {
-        logger.error(`Error no-Axios al obtener datos de la API ${source} (intento ${attempt + 1}/${retries + 1}):`, {
+        logger.error(`Non-Axios error retrieving data from ${source} API (attempt ${attempt + 1}/${retries + 1}):`, {
           requestId,
           error: error.message,
           stack: error.stack
@@ -693,13 +673,18 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
     }
   }
   
-  // If we've exhausted all retries, throw the last error
-  logger.error(`Error al obtener datos de la API ${source} después de ${retries + 1} intentos`, {
+  // If we've exhausted all retries, use mock data or throw the last error
+  logger.error(`Failed to retrieve data from ${source} API after ${retries + 1} attempts`, {
     requestId,
     error: lastError?.message
   });
   
-  throw lastError || new Error(`Error al obtener datos de la API ${source} después de ${retries + 1} intentos`);
+  if (useMockOnFail) {
+    logger.warn(`Falling back to mock data for ${source}`, { requestId });
+    return source.includes('rack') ? mockSensorData : { status: "Success", data: [] };
+  }
+  
+  throw lastError || new Error(`Failed to retrieve data from ${source} API after ${retries + 1} attempts`);
 };
 
 /**
@@ -713,7 +698,7 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
 export const getDataWithFallback = async (dbFunction, apiUrl, source, options = {}) => {
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   
-  logger.info(`Iniciando recuperación de datos para ${source} con opciones de fallback`, {
+  logger.info(`Starting data retrieval for ${source} with fallback options`, {
     requestId,
     source,
     apiUrl
@@ -721,7 +706,7 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
   
   // First, try to get data from database
   try {
-    logger.info(`[${requestId}] Intentando obtener ${source} desde la base de datos`, {
+    logger.info(`[${requestId}] Attempting to get ${source} from database`, {
       requestId,
       source,
       method: 'database'
@@ -731,14 +716,14 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
     const data = await dbFunction();
     const duration = Date.now() - startTime;
     
-    logger.info(`[${requestId}] Consulta a base de datos completada en ${duration}ms`, {
+    logger.info(`[${requestId}] Database query completed in ${duration}ms`, {
       requestId,
       duration,
       dataFound: data && data.length > 0
     });
     
     if (data && Array.isArray(data) && data.length > 0) {
-      logger.info(`[${requestId}] Recuperados ${data.length} registros de ${source} desde la base de datos`, {
+      logger.info(`[${requestId}] Retrieved ${data.length} ${source} records from database`, {
         requestId,
         itemCount: data.length,
         source,
@@ -749,14 +734,14 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
       return data;
     } else {
       // If database returned empty data, log a warning and try API
-      logger.warn(`[${requestId}] La base de datos devolvió un resultado vacío para ${source}. Probando API externa.`, {
+      logger.warn(`[${requestId}] Database returned empty result for ${source}. Trying external API.`, {
         requestId,
         source
       });
     }
   } catch (dbError) {
     // Log the database error
-    logger.warn(`[${requestId}] Acceso a base de datos fallido para ${source}: ${dbError.message}. Probando API externa.`, {
+    logger.warn(`[${requestId}] Database access failed for ${source}: ${dbError.message}. Trying external API.`, {
       requestId,
       error: dbError.message,
       code: dbError.code,
@@ -766,7 +751,7 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
   
   // If database access fails or returns empty data, try to fetch from external API
   try {
-    logger.info(`[${requestId}] Recurriendo a API externa para ${source}`, {
+    logger.info(`[${requestId}] Falling back to external API for ${source}`, {
       requestId,
       apiUrl,
       source
@@ -775,7 +760,7 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
     // Check if this is an OData API that needs pagination
     const needsPagination = isODataUrl(apiUrl);
     
-    logger.info(`[${requestId}] Tipo de API: ${needsPagination ? 'OData con paginación' : 'API estándar'}`, {
+    logger.info(`[${requestId}] API type: ${needsPagination ? 'OData with pagination' : 'Standard API'}`, {
       requestId,
       apiUrl,
       usePagination: needsPagination
@@ -791,7 +776,7 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
     });
     const duration = Date.now() - startTime;
     
-    logger.info(`[${requestId}] Petición a API completada en ${duration}ms`, {
+    logger.info(`[${requestId}] API request completed in ${duration}ms`, {
       requestId,
       duration,
       responseReceived: !!apiResponse
@@ -800,7 +785,7 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
     // Handle both old and new API formats
     if (apiResponse && apiResponse.status === "Success" && apiResponse.data && Array.isArray(apiResponse.data)) {
       // Old API format with status wrapper
-      logger.info(`[${requestId}] Recuperados ${apiResponse.data.length} registros de ${source} desde API externa (formato antiguo)`, {
+      logger.info(`[${requestId}] Retrieved ${apiResponse.data.length} ${source} records from external API (old format)`, {
         requestId,
         itemCount: apiResponse.data.length,
         source,
@@ -811,7 +796,7 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
       return apiResponse.data;
     } else if (apiResponse && Array.isArray(apiResponse)) {
       // New API format returns array directly
-      logger.info(`[${requestId}] Recuperados ${apiResponse.length} registros de ${source} desde API externa (formato nuevo)`, {
+      logger.info(`[${requestId}] Retrieved ${apiResponse.length} ${source} records from external API (new format)`, {
         requestId,
         itemCount: apiResponse.length,
         source,
@@ -821,32 +806,49 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
       
       return apiResponse;
     } else {
-      logger.warn(`[${requestId}] API externa devolvió datos inválidos o vacíos para ${source}`, {
+      logger.warn(`[${requestId}] External API returned invalid or empty data for ${source}`, {
         requestId,
         source
       });
       
+      // Check if we should use mock data
+      if (options.useMockOnFail) {
+        logger.warn(`[${requestId}] Using mock data for ${source}`, { 
+          requestId, 
+          source 
+        });
+        return source.includes('rack') ? mockSensorData.data : [];
+      } else {
+        logger.warn(`[${requestId}] Returning empty array for ${source}`, {
+          requestId,
+          source
+        });
+        return [];
+      }
+    }
+  } catch (apiError) {
+    logger.error(`[${requestId}] Both database access and API failed for ${source}`, {
+      requestId,
+      dbError: 'See previous logs',
+      apiError: apiError.message,
+      source
+    });
+    
+    // Use mock data if specified
+    if (options.useMockOnFail) {
+      logger.warn(`[${requestId}] Using mock data for ${source} after all methods failed`, {
+        requestId,
+        source
+      });
+      return source.includes('rack') ? mockSensorData.data : [];
+    } else {
       // Return empty array instead of using mock data
-      logger.warn(`[${requestId}] Devolviendo array vacío para ${source}`, {
+      logger.warn(`[${requestId}] Returning empty array for ${source} after all methods failed`, {
         requestId,
         source
       });
       return [];
     }
-  } catch (apiError) {
-    logger.error(`[${requestId}] Tanto el acceso a la base de datos como a la API fallaron para ${source}`, {
-      requestId,
-      dbError: 'Ver logs anteriores',
-      apiError: apiError.message,
-      source
-    });
-    
-    // Return empty array instead of using mock data
-    logger.warn(`[${requestId}] Devolviendo array vacío para ${source} después de fallar todos los métodos`, {
-      requestId,
-      source
-    });
-    return [];
   }
 };
 
@@ -860,11 +862,11 @@ export const isApiReachable = async (url, options = {}) => {
   const requestId = `ping_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   
   if (!url) {
-    logger.debug(`No se puede comprobar alcance: No se proporcionó URL`, { requestId });
+    logger.debug(`Cannot check reachability: No URL provided`, { requestId });
     return false;
   }
   
-  logger.info(`Comprobando si la API en ${url} es alcanzable`, { requestId, url });
+  logger.info(`Checking if API at ${url} is reachable`, { requestId, url });
   const startTime = Date.now();
   
   try {
@@ -879,7 +881,7 @@ export const isApiReachable = async (url, options = {}) => {
       headers['Authorization'] = `Bearer ${apiKey}`;
     }
     
-    logger.debug(`Intentando petición HEAD a ${url}`, { 
+    logger.debug(`Attempting HEAD request to ${url}`, { 
       requestId, 
       method: 'HEAD',
       timeout: options.timeout || 5000
@@ -889,22 +891,12 @@ export const isApiReachable = async (url, options = {}) => {
     const response = await axios.head(url, {
       headers,
       timeout: 5000,
-      validateStatus: status => {
-        // Accept any status < 500 as "reachable" except 530
-        if (status === 530) {
-          logger.warn(`Received status 530 from HEAD request to ${url}`, {
-            requestId,
-            status
-          });
-          return false;
-        }
-        return status < 500;
-      },
+      validateStatus: status => status < 500,
       ...options
     });
     
     const duration = Date.now() - startTime;
-    logger.info(`API en ${url} es alcanzable (petición HEAD, estado: ${response.status})`, { 
+    logger.info(`API at ${url} is reachable (HEAD request, status: ${response.status})`, { 
       requestId, 
       duration: `${duration}ms`,
       status: response.status
@@ -912,7 +904,7 @@ export const isApiReachable = async (url, options = {}) => {
     
     return true;
   } catch (headError) {
-    logger.debug(`Petición HEAD a ${url} falló: ${headError.message}. Intentando GET como alternativa.`, {
+    logger.debug(`HEAD request to ${url} failed: ${headError.message}. Trying GET as alternative.`, {
       requestId,
       error: headError.message,
       code: headError.code
@@ -931,7 +923,7 @@ export const isApiReachable = async (url, options = {}) => {
         headers['Authorization'] = `Bearer ${apiKey}`;
       }
       
-      logger.debug(`Intentando petición GET a ${url}`, { 
+      logger.debug(`Attempting GET request to ${url}`, { 
         requestId, 
         method: 'GET',
         timeout: options.timeout || 5000
@@ -940,22 +932,12 @@ export const isApiReachable = async (url, options = {}) => {
       const response = await axios.get(url, {
         headers,
         timeout: 5000,
-        validateStatus: status => {
-          // Accept any status < 500 as "reachable" except 530
-          if (status === 530) {
-            logger.warn(`Received status 530 from GET request to ${url}`, {
-              requestId,
-              status
-            });
-            return false;
-          }
-          return status < 500;
-        },
+        validateStatus: status => status < 500,
         ...options
       });
       
       const duration = Date.now() - startTime;
-      logger.info(`API en ${url} es alcanzable (petición GET, estado: ${response.status})`, { 
+      logger.info(`API at ${url} is reachable (GET request, status: ${response.status})`, { 
         requestId, 
         duration: `${duration}ms`,
         status: response.status
@@ -964,7 +946,7 @@ export const isApiReachable = async (url, options = {}) => {
       return true;
     } catch (error) {
       const duration = Date.now() - startTime;
-      logger.warn(`API en ${url} no es alcanzable: ${error.message}`, {
+      logger.warn(`API at ${url} is not reachable: ${error.message}`, {
         requestId,
         duration: `${duration}ms`,
         error: error.message,
@@ -984,7 +966,7 @@ export const isApiReachable = async (url, options = {}) => {
  */
 export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
   const diagnosisId = `diag_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-  logger.info(`Realizando diagnóstico de endpoint API para ${url}`, { diagnosisId, url });
+  logger.info(`Diagnosing API endpoint for ${url}`, { diagnosisId, url });
   
   const diagnosis = {
     url,
@@ -1005,10 +987,10 @@ export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
   try {
     // Check if the URL is valid
     if (!url) {
-      diagnosis.errorDetails = 'No se proporcionó URL';
-      diagnosis.recommendations.push('Proporcionar una URL válida para el diagnóstico');
+      diagnosis.errorDetails = 'No URL provided';
+      diagnosis.recommendations.push('Provide a valid URL for diagnosis');
       
-      logger.error(`Diagnóstico falló: No se proporcionó URL`, { diagnosisId });
+      logger.error(`Diagnosis failed: No URL provided`, { diagnosisId });
       return diagnosis;
     }
     
@@ -1016,10 +998,10 @@ export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
     try {
       new URL(url);
     } catch (urlError) {
-      diagnosis.errorDetails = 'Formato de URL inválido';
-      diagnosis.recommendations.push('Comprobar formato de URL (debería ser como http://ejemplo.com/api/ruta)');
+      diagnosis.errorDetails = 'Invalid URL format';
+      diagnosis.recommendations.push('Check URL format (should be like http://example.com/api/path)');
       
-      logger.error(`Diagnóstico falló: Formato de URL inválido - ${url}`, { 
+      logger.error(`Diagnosis failed: Invalid URL format - ${url}`, { 
         diagnosisId,
         error: urlError.message
       });
@@ -1040,7 +1022,7 @@ export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
         headers['Authorization'] = `Bearer ${apiKey}`;
       }
       
-      logger.debug(`Enviando petición de diagnóstico a ${url}`, {
+      logger.debug(`Sending diagnosis request to ${url}`, {
         diagnosisId,
         method: 'GET',
         timeout: 10000
@@ -1049,17 +1031,7 @@ export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
       const response = await axios.get(url, {
         timeout: 10000,
         headers,
-        validateStatus: (status) => {
-          // For diagnosis purposes, we'll handle all status codes including 530
-          if (status === 530) {
-            logger.warn(`Diagnóstico: Recibido código de estado 530 (posible error FTP)`, {
-              diagnosisId,
-              status
-            });
-            return false;
-          }
-          return true; // Accept any status code for diagnostic purposes
-        }
+        validateStatus: () => true // Accept any status code for diagnostic purposes
       });
       
       // Calculate response time
@@ -1068,21 +1040,12 @@ export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
       diagnosis.statusCode = response.status;
       diagnosis.contentType = response.headers['content-type'];
       
-      logger.info(`Petición de diagnóstico completada con estado ${response.status} en ${diagnosis.responseTime}ms`, {
+      logger.info(`Diagnosis request completed with status ${response.status} in ${diagnosis.responseTime}ms`, {
         diagnosisId,
         status: response.status,
         contentType: diagnosis.contentType,
         responseTime: diagnosis.responseTime
       });
-      
-      // Special handling for status code 530
-      if (response.status === 530) {
-        diagnosis.recommendations.push('Status code 530 detected - this is typically an FTP authentication error. Check if the endpoint might be an FTP server instead of an HTTP API.');
-        logger.warn(`Diagnóstico: Código 530 indicativo de problema de autenticación FTP`, {
-          diagnosisId,
-          url
-        });
-      }
       
       // Check response content type
       if (diagnosis.contentType && diagnosis.contentType.includes('application/json')) {
@@ -1096,38 +1059,38 @@ export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
           
           // Check for common response structures
           if (Array.isArray(response.data)) {
-            diagnosis.responseStructure = 'Respuesta de array directa (Formato de API nuevo)';
+            diagnosis.responseStructure = 'Direct array response (New API format)';
             if (response.data.length > 0) {
               diagnosis.sampleKeys = Object.keys(response.data[0]);
             }
           } else if (response.data.status === 'Success' && Array.isArray(response.data.data)) {
-            diagnosis.responseStructure = 'Estándar { status, data[] } (Formato heredado)';
+            diagnosis.responseStructure = 'Standard { status, data[] } (Legacy format)';
           } else if (response.data.success === true && response.data.data) {
-            diagnosis.responseStructure = 'Estándar { success: true, data }';
+            diagnosis.responseStructure = 'Standard { success: true, data }';
           } else {
-            diagnosis.responseStructure = 'Estructura JSON no estándar';
-            diagnosis.recommendations.push('La estructura de respuesta de la API no coincide con los formatos esperados');
+            diagnosis.responseStructure = 'Non-standard JSON structure';
+            diagnosis.recommendations.push('The API response structure does not match expected formats');
           }
         }
       } else {
-        diagnosis.responseType = 'No JSON';
-        diagnosis.recommendations.push('La respuesta de la API no está en formato JSON');
+        diagnosis.responseType = 'Not JSON';
+        diagnosis.recommendations.push('The API response is not in JSON format');
       }
       
       // Status code recommendations
       if (response.status !== 200) {
         if (response.status === 401 || response.status === 403) {
-          diagnosis.recommendations.push('Problema de autenticación - comprobar API key');
+          diagnosis.recommendations.push('Authentication issue - check API key');
         } else if (response.status === 404) {
-          diagnosis.recommendations.push('Recurso no encontrado - comprobar ruta URL');
+          diagnosis.recommendations.push('Resource not found - check URL path');
         } else if (response.status >= 500) {
-          diagnosis.recommendations.push('Error de servidor - el servidor API podría estar experimentando problemas');
+          diagnosis.recommendations.push('Server error - the API server might be experiencing problems');
         }
       }
       
       // Response time recommendations
       if (diagnosis.responseTime > 5000) {
-        diagnosis.recommendations.push('Tiempo de respuesta lento - considerar aumentar configuración de timeout');
+        diagnosis.recommendations.push('Slow response time - consider increasing timeout configuration');
       }
       
       // OData specific recommendations
@@ -1136,20 +1099,20 @@ export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
         
         // Check if URL already has pagination parameters
         if (!url.includes('$top=')) {
-          diagnosis.recommendations.push('API OData detectada - considere usar parámetro $top=50 para limitar resultados por página');
+          diagnosis.recommendations.push('OData API detected - consider using $top=50 parameter to limit results per page');
         } else if (url.includes('$top=100') || url.includes('$top=1000')) {
-          diagnosis.recommendations.push('Valor de $top demasiado alto - considere reducirlo a 50 para evitar problemas de límites del servidor');
+          diagnosis.recommendations.push('$top value too high - consider reducing to 50 to avoid server limit issues');
         }
         
         if (!url.includes('$skip=')) {
-          diagnosis.recommendations.push('API OData detectada - considere usar parámetro $skip para paginación');
+          diagnosis.recommendations.push('OData API detected - consider using $skip parameter for pagination');
         }
       }
     } catch (error) {
       diagnosis.isReachable = false;
       diagnosis.responseTime = Date.now() - startTime;
       
-      logger.error(`Petición de diagnóstico falló tras ${diagnosis.responseTime}ms: ${error.message}`, {
+      logger.error(`Diagnosis request failed after ${diagnosis.responseTime}ms: ${error.message}`, {
         diagnosisId,
         error: error.message,
         code: error.code
@@ -1163,15 +1126,6 @@ export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
           diagnosis.statusCode = error.response.status;
           diagnosis.responseType = error.response.headers['content-type'];
           
-          // Special handling for status code 530
-          if (error.response.status === 530) {
-            diagnosis.recommendations.push('Recibido código de estado 530 - Esto es típicamente un error de autenticación FTP. Compruebe si el endpoint podría ser un servidor FTP en lugar de una API HTTP.');
-            logger.warn(`Diagnóstico: Recibido código 530 indicativo de problema con FTP`, {
-              diagnosisId,
-              url
-            });
-          }
-          
           if (includeResponseData && error.response.data) {
             diagnosis.responseData = error.response.data;
           }
@@ -1179,19 +1133,19 @@ export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
         
         // Provide specific recommendations based on error code
         if (error.code === 'ECONNABORTED') {
-          diagnosis.recommendations.push('Tiempo de espera agotado - el servidor tardó demasiado en responder');
+          diagnosis.recommendations.push('Timeout - the server took too long to respond');
         } else if (error.code === 'ECONNREFUSED') {
-          diagnosis.recommendations.push('Conexión rechazada - el servidor podría estar caído o la URL es incorrecta');
+          diagnosis.recommendations.push('Connection refused - the server might be down or the URL is incorrect');
         } else if (error.code === 'ENOTFOUND') {
-          diagnosis.recommendations.push('Búsqueda DNS fallida - comprobar el hostname en la URL');
+          diagnosis.recommendations.push('DNS lookup failed - check the hostname in the URL');
         }
       } else {
-        diagnosis.errorDetails = `Error no-Axios: ${error.message}`;
+        diagnosis.errorDetails = `Non-Axios error: ${error.message}`;
       }
     }
   } catch (error) {
-    diagnosis.errorDetails = `Error inesperado durante diagnóstico: ${error.message}`;
-    logger.error(`Error inesperado durante diagnóstico de API:`, {
+    diagnosis.errorDetails = `Unexpected error during diagnosis: ${error.message}`;
+    logger.error(`Unexpected error during API diagnosis:`, {
       diagnosisId,
       error: error.message,
       stack: error.stack
@@ -1201,13 +1155,13 @@ export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
   // Add general recommendations if none specific were added
   if (diagnosis.recommendations.length === 0) {
     if (!diagnosis.isReachable) {
-      diagnosis.recommendations.push('Endpoint API no es alcanzable - comprobar conectividad de red y URL');
+      diagnosis.recommendations.push('API endpoint is not reachable - check network connectivity and URL');
     } else if (diagnosis.statusCode >= 400) {
-      diagnosis.recommendations.push('API devolvió un código de estado de error');
+      diagnosis.recommendations.push('API returned an error status code');
     }
   }
   
-  logger.info(`Diagnóstico de API completado para ${url}: ${diagnosis.isReachable ? 'Alcanzable' : 'No alcanzable'}, Estado: ${diagnosis.statusCode}`, {
+  logger.info(`API diagnosis completed for ${url}: ${diagnosis.isReachable ? 'Reachable' : 'Not reachable'}, Status: ${diagnosis.statusCode}`, {
     diagnosisId,
     isReachable: diagnosis.isReachable,
     statusCode: diagnosis.statusCode,

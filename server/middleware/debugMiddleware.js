@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
  */
 export const debugMiddleware = (req, res, next) => {
   // Generate a unique ID for this request if it doesn't have one
-  req.requestId = req.headers['x-request-id'] || `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  req.requestId = req.headers['x-request-id'] || uuidv4();
   
   // Add start time to request for later calculation of response time
   req.startTime = Date.now();
@@ -22,6 +22,7 @@ export const debugMiddleware = (req, res, next) => {
     res.set('X-Debug-Id', req.requestId);
     res.set('X-Debug-Time', `${responseTime}ms`);
     res.set('X-Debug-Path', req.originalUrl);
+    res.set('X-Request-ID', req.requestId);
     
     // If client requested debug information (via header) and response is JSON
     if (req.headers['x-debug'] === 'true' && typeof body === 'string') {
@@ -34,7 +35,11 @@ export const debugMiddleware = (req, res, next) => {
           path: req.originalUrl,
           method: req.method,
           responseTime: `${responseTime}ms`,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          server: {
+            node: process.version,
+            uptime: process.uptime()
+          }
         };
         
         // Convert back to string

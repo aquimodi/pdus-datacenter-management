@@ -1,6 +1,4 @@
 import axios, { AxiosRequestConfig } from 'axios';
-import { v4 as uuidv4 } from 'uuid';
-import { useDebug } from '../context/DebugContext';
 
 interface RouteRequest {
   destination: string;
@@ -21,15 +19,16 @@ export async function routeRequest(request: RouteRequest) {
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
   try {
-    // Add debug header if needed
+    // Always add debug headers for better troubleshooting
     const augmentedHeaders = {
       ...request.headers,
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
       'X-Debug': 'true',
       'X-Request-ID': requestId
     };
 
-    // IMPORTANT FIX: Only add API key for external API calls (not for local server)
+    // Check if this is a local server call or an external API call
     const isLocalServerCall = request.destination.includes('localhost') || 
                             request.destination.includes('127.0.0.1') ||
                             (import.meta.env.VITE_LOCAL_SERVER_URL && 
@@ -40,10 +39,10 @@ export async function routeRequest(request: RouteRequest) {
       const apiKey = import.meta.env.VITE_API_KEY;
       if (apiKey) {
         augmentedHeaders['Authorization'] = `Bearer ${apiKey}`;
-        console.log(`Añadiendo cabecera de autorización para llamada API externa a: ${request.destination}`);
+        console.log(`Adding authorization header for external API call to: ${request.destination}`);
       }
     } else {
-      console.log(`Omitiendo cabecera de autorización para llamada al servidor local: ${request.destination}`);
+      console.log(`Skipping authorization header for local server call: ${request.destination}`);
     }
 
     const config: AxiosRequestConfig = {
@@ -51,16 +50,18 @@ export async function routeRequest(request: RouteRequest) {
       url: request.destination,
       headers: augmentedHeaders,
       data: request.body,
+      timeout: 15000, // Increased timeout to 15 seconds
     };
 
-    console.group(`🔷 Petición API [${requestId}]`);
-    console.log('Detalles de la petición:', {
+    // Detailed logging of the request
+    console.group(`🔷 API Request [${requestId}]`);
+    console.log('Request details:', {
       id: requestId,
       timestamp: new Date().toISOString(),
       method: request.method,
       url: request.destination,
       isLocalServer: isLocalServerCall,
-      headers: augmentedHeaders,
+      headers: {...augmentedHeaders, 'Authorization': augmentedHeaders['Authorization'] ? '[REDACTED]' : undefined},
       body: request.body
     });
     console.groupEnd();
@@ -73,19 +74,19 @@ export async function routeRequest(request: RouteRequest) {
       method: request.method,
       url: request.destination,
       isLocalServer: isLocalServerCall,
-      headers: augmentedHeaders,
+      headers: {...augmentedHeaders, 'Authorization': augmentedHeaders['Authorization'] ? '[REDACTED]' : undefined},
       body: request.body
     };
 
     // This will help debug HTTP interactions
-    console.log('REGISTRO HTTP PETICIÓN COMPLETA:', JSON.stringify(fullRequestLog, null, 2));
+    console.log('COMPLETE HTTP REQUEST LOG:', JSON.stringify(fullRequestLog, null, 2));
 
     const response = await axios(config);
     
     const responseTime = Date.now() - startTime;
     
-    console.group(`🔶 Respuesta API [${requestId}]`);
-    console.log('Detalles de la respuesta:', {
+    console.group(`🔶 API Response [${requestId}]`);
+    console.log('Response details:', {
       id: requestId,
       timestamp: new Date().toISOString(),
       url: request.destination,
@@ -95,7 +96,7 @@ export async function routeRequest(request: RouteRequest) {
       headers: response.headers,
       responseTime: `${responseTime}ms`
     });
-    console.log('Datos de la respuesta:', response.data);
+    console.log('Response data:', response.data);
     console.groupEnd();
 
     // Log the full response with all details for debugging
@@ -113,7 +114,7 @@ export async function routeRequest(request: RouteRequest) {
     };
 
     // This will help debug HTTP interactions
-    console.log('REGISTRO HTTP RESPUESTA COMPLETA:', JSON.stringify(fullResponseLog, null, 2));
+    console.log('COMPLETE HTTP RESPONSE LOG:', JSON.stringify(fullResponseLog, null, 2));
 
     // Create log entry for debug panel
     const logEntry = {
@@ -124,7 +125,7 @@ export async function routeRequest(request: RouteRequest) {
       status: response.status,
       responseTime,
       requestBody: request.body,
-      requestHeaders: augmentedHeaders,
+      requestHeaders: {...augmentedHeaders, 'Authorization': augmentedHeaders['Authorization'] ? '[REDACTED]' : undefined},
       responseBody: response.data,
       responseHeaders: response.headers
     };
@@ -140,15 +141,15 @@ export async function routeRequest(request: RouteRequest) {
       const event = new CustomEvent('api-log', { detail: logEntry });
       window.dispatchEvent(event);
     } catch (e) {
-      console.error('Error al registrar petición API:', e);
+      console.error('Error logging API request:', e);
     }
 
     return response.data;
   } catch (error) {
     const responseTime = Date.now() - startTime;
     
-    console.group(`❌ Error API [${requestId}]`);
-    console.error('Llamada API fallida:', {
+    console.group(`❌ API Error [${requestId}]`);
+    console.error('API call failed:', {
       id: requestId,
       timestamp: new Date().toISOString(),
       url: request.destination,
@@ -168,21 +169,23 @@ export async function routeRequest(request: RouteRequest) {
 
     // Detailed error logging for debugging purposes
     if (axios.isAxiosError(error)) {
-      console.group(`🔍 Detalles del Error API [${requestId}]`);
-      console.log('Mensaje de error:', error.message);
-      console.log('Código de error:', error.code);
+      console.group(`🔍 API Error Details [${requestId}]`);
+      console.log('Error message:', error.message);
+      console.log('Error code:', error.code);
       
       if (error.request) {
-        console.log('Petición:', {
+        console.log('Request:', {
           method: error.config?.method,
           url: error.config?.url,
-          headers: error.config?.headers,
+          headers: error.config?.headers ? 
+            {...error.config.headers, Authorization: error.config.headers.Authorization ? '[REDACTED]' : undefined} : 
+            undefined,
           data: error.config?.data
         });
       }
       
       if (error.response) {
-        console.log('Respuesta:', {
+        console.log('Response:', {
           status: error.response.status,
           statusText: error.response.statusText,
           headers: error.response.headers,
@@ -201,7 +204,9 @@ export async function routeRequest(request: RouteRequest) {
       status: axios.isAxiosError(error) && error.response ? error.response.status : 0,
       responseTime,
       requestBody: request.body,
-      requestHeaders: request.headers,
+      requestHeaders: request.headers ? 
+        {...request.headers, Authorization: request.headers.Authorization ? '[REDACTED]' : undefined} : 
+        undefined,
       error: axios.isAxiosError(error) 
         ? {
             message: error.message,
@@ -209,13 +214,15 @@ export async function routeRequest(request: RouteRequest) {
             status: error.response?.status,
             statusText: error.response?.statusText,
             data: error.response?.data,
-            requestHeaders: error.config?.headers
+            requestHeaders: error.config?.headers ? 
+              {...error.config.headers, Authorization: error.config.headers.Authorization ? '[REDACTED]' : undefined} : 
+              undefined
           }
         : String(error)
     };
 
     // Log the full error with all details for debugging
-    console.log('REGISTRO HTTP ERROR COMPLETO:', JSON.stringify(logEntry, null, 2));
+    console.log('COMPLETE HTTP ERROR LOG:', JSON.stringify(logEntry, null, 2));
 
     // Try to dispatch event for debug panel
     try {
@@ -228,7 +235,7 @@ export async function routeRequest(request: RouteRequest) {
       const event = new CustomEvent('api-log', { detail: logEntry });
       window.dispatchEvent(event);
     } catch (e) {
-      console.error('Error al registrar error API:', e);
+      console.error('Error logging API error:', e);
     }
 
     if (axios.isAxiosError(error)) {
@@ -241,7 +248,7 @@ export async function routeRequest(request: RouteRequest) {
         data: error.response?.data
       };
       
-      throw new Error(`Error API: ${error.message} (Estado: ${error.response?.status || 'desconocido'})`);
+      throw new Error(`API Error: ${error.message} (Status: ${error.response?.status || 'unknown'})`);
     }
     throw error;
   }
