@@ -377,45 +377,71 @@ server.on('error', (error) => {
 
 // Function to check API endpoints on startup
 async function checkApiEndpoints() {
-  logger.info('Checking API endpoints...');
+  logger.info('Checking API endpoints...', {
+    timestamp: new Date().toISOString(),
+    api1Url: process.env.API1_URL,
+    api2Url: process.env.API2_URL
+  });
   
   // Check API1 (Racks API)
   try {
     const startTime = Date.now();
+    logger.info(`Starting API1 reachability check for ${process.env.API1_URL}`, {
+      timestamp: new Date().toISOString(),
+      startTime
+    });
+    
     const api1Reachable = await isApiReachable(process.env.API1_URL);
     const duration = Date.now() - startTime;
     
-    logger.info(`API1 (${process.env.API1_URL || 'undefined'}) reachable: ${api1Reachable}`, {
-      duration: `${duration}ms`
+    logger.info(`API1 (${process.env.API1_URL || 'undefined'}) reachability check completed: ${api1Reachable ? 'REACHABLE' : 'NOT REACHABLE'}`, {
+      duration: `${duration}ms`,
+      timestamp: new Date().toISOString(),
+      api1Url: process.env.API1_URL
     });
     
     if (!api1Reachable) {
-      logger.warn('API1 is not reachable. Using database data if available.');
+      logger.warn('API1 is not reachable. Using database data if available.', {
+        timestamp: new Date().toISOString()
+      });
     }
   } catch (error) {
     logger.error(`Error checking API1:`, {
       error: error.message,
-      stack: error.stack
+      stack: error.stack,
+      timestamp: new Date().toISOString(),
+      api1Url: process.env.API1_URL
     });
   }
   
   // Check API2 (Sensors API)
   try {
     const startTime = Date.now();
+    logger.info(`Starting API2 reachability check for ${process.env.API2_URL}`, {
+      timestamp: new Date().toISOString(),
+      startTime
+    });
+    
     const api2Reachable = await isApiReachable(process.env.API2_URL);
     const duration = Date.now() - startTime;
     
-    logger.info(`API2 (${process.env.API2_URL || 'undefined'}) reachable: ${api2Reachable}`, {
-      duration: `${duration}ms`
+    logger.info(`API2 (${process.env.API2_URL || 'undefined'}) reachability check completed: ${api2Reachable ? 'REACHABLE' : 'NOT REACHABLE'}`, {
+      duration: `${duration}ms`,
+      timestamp: new Date().toISOString(),
+      api2Url: process.env.API2_URL
     });
     
     if (!api2Reachable) {
-      logger.warn('API2 is not reachable. Using database data if available.');
+      logger.warn('API2 is not reachable. Using database data if available.', {
+        timestamp: new Date().toISOString()
+      });
     }
   } catch (error) {
     logger.error(`Error checking API2:`, {
       error: error.message,
-      stack: error.stack
+      stack: error.stack,
+      timestamp: new Date().toISOString(),
+      api2Url: process.env.API2_URL
     });
   }
 }
@@ -427,26 +453,39 @@ async function checkDatabaseConnection() {
     return;
   }
   
-  logger.info('Checking database connection...');
+  logger.info('Checking database connection...', {
+    timestamp: new Date().toISOString(),
+    server: process.env.SQL_SERVER,
+    database: process.env.SQL_DATABASE
+  });
   
   try {
     const startTime = Date.now();
+    logger.debug(`Starting database ping operation`, {
+      timestamp: new Date().toISOString(),
+      startTime
+    });
+    
     const dbConnected = await pingDatabase();
     const duration = Date.now() - startTime;
     
-    logger.info(`Database connection: ${dbConnected ? 'Successful' : 'Failed'}`, {
+    logger.info(`Database connection check completed: ${dbConnected ? 'SUCCESSFUL' : 'FAILED'}`, {
       server: process.env.SQL_SERVER || 'undefined',
       database: process.env.SQL_DATABASE || 'undefined',
-      duration: `${duration}ms`
+      duration: `${duration}ms`,
+      timestamp: new Date().toISOString()
     });
     
     if (!dbConnected) {
-      logger.warn(`Database connection failed. Will use API data as fallback.`);
+      logger.warn(`Database connection failed. Will use API data as fallback.`, {
+        timestamp: new Date().toISOString()
+      });
     }
   } catch (error) {
     logger.error(`Error checking database connection:`, {
       error: error.message,
-      stack: error.stack
+      stack: error.stack,
+      timestamp: new Date().toISOString()
     });
   }
 }
@@ -491,7 +530,8 @@ function gracefulShutdown() {
 process.on('uncaughtException', (error) => {
   logger.error('Uncaught exception:', {
     error: error.message,
-    stack: error.stack
+    stack: error.stack,
+    timestamp: new Date().toISOString()
   });
   
   // Log additional diagnostic information
@@ -516,7 +556,8 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason, promise) => {
   logger.error('Unhandled promise rejection:', {
     reason: reason ? (reason.stack || reason.message || reason) : 'Unknown reason',
-    promise
+    promise,
+    timestamp: new Date().toISOString()
   });
   
   // Log additional context

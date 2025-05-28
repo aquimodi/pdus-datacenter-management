@@ -389,7 +389,16 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
   logger.info(`Starting external API request: ${source}`, {
     requestId,
     url,
-    source
+    source,
+    options: {
+      retries,
+      retryDelay,
+      useMockOnFail,
+      useCircuitBreaker,
+      usePagination,
+      pageSize,
+      debug
+    }
   });
   
   // Check if circuit breaker is open for this endpoint
@@ -411,7 +420,10 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
     throw new Error(`Service unavailable: ${source} API is currently unavailable (circuit open)`);
   }
 
-  logger.info(`Querying external API ${source}: ${url}`, { requestId });
+  logger.info(`Querying external API ${source}: ${url}`, { 
+    requestId,
+    timestamp: new Date().toISOString() 
+  });
   
   let lastError = null;
   
@@ -427,7 +439,8 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
         requestId,
         attempt,
         maxRetries: retries,
-        delay: Math.round(delayWithJitter)
+        delay: Math.round(delayWithJitter),
+        timestamp: new Date().toISOString()
       });
       
       await sleep(delayWithJitter);
@@ -492,7 +505,8 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
       logger.info(`Sending ${requestConfig.method || 'GET'} request to ${url}${shouldUsePagination ? ' (with pagination)' : ''}`, { 
         requestId,
         attempt: attempt + 1,
-        maxRetries: retries + 1
+        maxRetries: retries + 1,
+        timestamp: new Date().toISOString()
       });
       
       let response;
@@ -510,7 +524,8 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
           logger.info(`Paginated request completed in ${duration}ms. Retrieved ${allPages.length} total records.`, {
             requestId,
             duration,
-            recordCount: allPages.length
+            recordCount: allPages.length,
+            timestamp: new Date().toISOString()
           });
           
           response = {
@@ -523,7 +538,8 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
           logger.error(`Error in paginated request: ${paginationError.message}`, {
             requestId,
             error: paginationError.message,
-            code: paginationError.code
+            code: paginationError.code,
+            timestamp: new Date().toISOString()
           });
           
           throw paginationError;
@@ -531,6 +547,12 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
       } else {
         // Standard non-paginated request
         const startTime = Date.now();
+        logger.debug(`Starting API request to ${url}`, {
+          requestId,
+          startTime: startTime,
+          timestamp: new Date().toISOString()
+        });
+        
         response = await axios.get(url, requestConfig);
         duration = Date.now() - startTime;
         
@@ -539,7 +561,8 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
           duration,
           status: response.status,
           statusText: response.statusText,
-          contentType: response.headers['content-type']
+          contentType: response.headers['content-type'],
+          timestamp: new Date().toISOString()
         });
       }
 
@@ -547,7 +570,8 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
       if (!response || !response.data) {
         logger.error(`Invalid or empty response received from ${source} API`, {
           requestId,
-          response: response ? 'Empty data' : 'No response'
+          response: response ? 'Empty data' : 'No response',
+          timestamp: new Date().toISOString()
         });
         
         throw new Error(`Invalid or empty response received from ${source} API`);
@@ -558,7 +582,9 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
         logger.info(`Data successfully retrieved from ${source} API on attempt ${attempt + 1}`, {
           requestId,
           itemCount: response.data.length,
-          format: 'array'
+          format: 'array',
+          duration,
+          timestamp: new Date().toISOString()
         });
         
         // Record success in circuit breaker
@@ -578,7 +604,9 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
         logger.info(`Data successfully retrieved from ${source} API on attempt ${attempt + 1}`, {
           requestId,
           itemCount: response.data.data?.length,
-          format: 'status-wrapper'
+          format: 'status-wrapper',
+          duration,
+          timestamp: new Date().toISOString()
         });
         
         // Record success in circuit breaker
@@ -592,7 +620,8 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
         const errorMsg = `Invalid response from ${source} API: ${JSON.stringify(response.data)}`;
         logger.error(errorMsg, {
           requestId,
-          responseData: response.data
+          responseData: response.data,
+          timestamp: new Date().toISOString()
         });
         
         lastError = new Error(errorMsg);
@@ -616,7 +645,8 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
         response: error.response ? {
           status: error.response.status,
           statusText: error.response.statusText
-        } : null
+        } : null,
+        timestamp: new Date().toISOString()
       });
 
       // Log detailed error information
@@ -625,27 +655,40 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
           requestId,
           message: error.message,
           code: error.code,
-          status: error.response?.status
+          status: error.response?.status,
+          config: error.config ? {
+            url: error.config.url,
+            method: error.config.method,
+            timeout: error.config.timeout,
+            headers: error.config.headers ? 
+              {...error.config.headers, Authorization: error.config.headers.Authorization ? '[REDACTED]' : undefined} :
+              undefined
+          } : 'No config available',
+          timestamp: new Date().toISOString()
         });
 
         // Enhanced error logging for common issues
         if (error.code === 'ECONNABORTED') {
           logger.error(`Timeout (${error.config?.timeout}ms) exceeded for ${source} API`, {
             requestId,
-            timeout: error.config?.timeout
+            timeout: error.config?.timeout,
+            timestamp: new Date().toISOString()
           });
         } else if (error.code === 'ECONNREFUSED') {
           logger.error(`Connection refused to ${source} API. Server might be down or unreachable.`, {
             requestId,
-            url
+            url,
+            timestamp: new Date().toISOString()
           });
         } else if (error.response && error.response.status === 401) {
           logger.error(`Authentication failed for ${source} API. Check API key.`, {
-            requestId
+            requestId,
+            timestamp: new Date().toISOString()
           });
         } else if (error.response && error.response.status === 403) {
           logger.error(`Access forbidden to ${source} API. Check permissions.`, {
-            requestId
+            requestId,
+            timestamp: new Date().toISOString()
           });
         }
         
@@ -657,7 +700,8 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
         logger.error(`Non-Axios error retrieving data from ${source} API (attempt ${attempt + 1}/${retries + 1}):`, {
           requestId,
           error: error.message,
-          stack: error.stack
+          stack: error.stack,
+          timestamp: new Date().toISOString()
         });
         
         // Record failure in circuit breaker
@@ -676,11 +720,15 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
   // If we've exhausted all retries, use mock data or throw the last error
   logger.error(`Failed to retrieve data from ${source} API after ${retries + 1} attempts`, {
     requestId,
-    error: lastError?.message
+    error: lastError?.message,
+    timestamp: new Date().toISOString()
   });
   
   if (useMockOnFail) {
-    logger.warn(`Falling back to mock data for ${source}`, { requestId });
+    logger.warn(`Falling back to mock data for ${source}`, { 
+      requestId,
+      timestamp: new Date().toISOString()
+    });
     return source.includes('rack') ? mockSensorData : { status: "Success", data: [] };
   }
   
@@ -701,7 +749,8 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
   logger.info(`Starting data retrieval for ${source} with fallback options`, {
     requestId,
     source,
-    apiUrl
+    apiUrl,
+    timestamp: new Date().toISOString()
   });
   
   // First, try to get data from database
@@ -709,7 +758,8 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
     logger.info(`[${requestId}] Attempting to get ${source} from database`, {
       requestId,
       source,
-      method: 'database'
+      method: 'database',
+      timestamp: new Date().toISOString()
     });
     
     const startTime = Date.now();
@@ -719,7 +769,8 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
     logger.info(`[${requestId}] Database query completed in ${duration}ms`, {
       requestId,
       duration,
-      dataFound: data && data.length > 0
+      dataFound: data && data.length > 0,
+      timestamp: new Date().toISOString()
     });
     
     if (data && Array.isArray(data) && data.length > 0) {
@@ -728,7 +779,8 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
         itemCount: data.length,
         source,
         method: 'database',
-        duration
+        duration,
+        timestamp: new Date().toISOString()
       });
       
       return data;
@@ -736,7 +788,8 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
       // If database returned empty data, log a warning and try API
       logger.warn(`[${requestId}] Database returned empty result for ${source}. Trying external API.`, {
         requestId,
-        source
+        source,
+        timestamp: new Date().toISOString()
       });
     }
   } catch (dbError) {
@@ -745,7 +798,8 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
       requestId,
       error: dbError.message,
       code: dbError.code,
-      source
+      source,
+      timestamp: new Date().toISOString()
     });
   }
   
@@ -754,7 +808,8 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
     logger.info(`[${requestId}] Falling back to external API for ${source}`, {
       requestId,
       apiUrl,
-      source
+      source,
+      timestamp: new Date().toISOString()
     });
     
     // Check if this is an OData API that needs pagination
@@ -763,7 +818,8 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
     logger.info(`[${requestId}] API type: ${needsPagination ? 'OData with pagination' : 'Standard API'}`, {
       requestId,
       apiUrl,
-      usePagination: needsPagination
+      usePagination: needsPagination,
+      timestamp: new Date().toISOString()
     });
     
     const startTime = Date.now();
@@ -779,7 +835,8 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
     logger.info(`[${requestId}] API request completed in ${duration}ms`, {
       requestId,
       duration,
-      responseReceived: !!apiResponse
+      responseReceived: !!apiResponse,
+      timestamp: new Date().toISOString()
     });
     
     // Handle both old and new API formats
@@ -790,7 +847,8 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
         itemCount: apiResponse.data.length,
         source,
         method: 'api-old-format',
-        duration
+        duration,
+        timestamp: new Date().toISOString()
       });
       
       return apiResponse.data;
@@ -801,27 +859,31 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
         itemCount: apiResponse.length,
         source,
         method: 'api-new-format',
-        duration
+        duration,
+        timestamp: new Date().toISOString()
       });
       
       return apiResponse;
     } else {
       logger.warn(`[${requestId}] External API returned invalid or empty data for ${source}`, {
         requestId,
-        source
+        source,
+        timestamp: new Date().toISOString()
       });
       
       // Check if we should use mock data
       if (options.useMockOnFail) {
         logger.warn(`[${requestId}] Using mock data for ${source}`, { 
           requestId, 
-          source 
+          source,
+          timestamp: new Date().toISOString()
         });
         return source.includes('rack') ? mockSensorData.data : [];
       } else {
         logger.warn(`[${requestId}] Returning empty array for ${source}`, {
           requestId,
-          source
+          source,
+          timestamp: new Date().toISOString()
         });
         return [];
       }
@@ -831,21 +893,24 @@ export const getDataWithFallback = async (dbFunction, apiUrl, source, options = 
       requestId,
       dbError: 'See previous logs',
       apiError: apiError.message,
-      source
+      source,
+      timestamp: new Date().toISOString()
     });
     
     // Use mock data if specified
     if (options.useMockOnFail) {
       logger.warn(`[${requestId}] Using mock data for ${source} after all methods failed`, {
         requestId,
-        source
+        source,
+        timestamp: new Date().toISOString()
       });
       return source.includes('rack') ? mockSensorData.data : [];
     } else {
       // Return empty array instead of using mock data
       logger.warn(`[${requestId}] Returning empty array for ${source} after all methods failed`, {
         requestId,
-        source
+        source,
+        timestamp: new Date().toISOString()
       });
       return [];
     }
@@ -862,11 +927,18 @@ export const isApiReachable = async (url, options = {}) => {
   const requestId = `ping_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   
   if (!url) {
-    logger.debug(`Cannot check reachability: No URL provided`, { requestId });
+    logger.debug(`Cannot check reachability: No URL provided`, { 
+      requestId,
+      timestamp: new Date().toISOString()
+    });
     return false;
   }
   
-  logger.info(`Checking if API at ${url} is reachable`, { requestId, url });
+  logger.info(`Checking if API at ${url} is reachable`, { 
+    requestId, 
+    url,
+    timestamp: new Date().toISOString()
+  });
   const startTime = Date.now();
   
   try {
@@ -884,22 +956,23 @@ export const isApiReachable = async (url, options = {}) => {
     logger.debug(`Attempting HEAD request to ${url}`, { 
       requestId, 
       method: 'HEAD',
-      timeout: options.timeout || 5000
+      timeout: options.timeout || 5000,
+      timestamp: new Date().toISOString()
     });
     
     // First try a HEAD request as it's more efficient
     const response = await axios.head(url, {
       headers,
       timeout: 5000,
-      validateStatus: status => status < 500,
-      ...options
+      validateStatus: null // Don't throw on error status codes
     });
     
     const duration = Date.now() - startTime;
     logger.info(`API at ${url} is reachable (HEAD request, status: ${response.status})`, { 
       requestId, 
       duration: `${duration}ms`,
-      status: response.status
+      status: response.status,
+      timestamp: new Date().toISOString()
     });
     
     return true;
@@ -907,7 +980,8 @@ export const isApiReachable = async (url, options = {}) => {
     logger.debug(`HEAD request to ${url} failed: ${headError.message}. Trying GET as alternative.`, {
       requestId,
       error: headError.message,
-      code: headError.code
+      code: headError.code,
+      timestamp: new Date().toISOString()
     });
     
     try {
@@ -926,21 +1000,22 @@ export const isApiReachable = async (url, options = {}) => {
       logger.debug(`Attempting GET request to ${url}`, { 
         requestId, 
         method: 'GET',
-        timeout: options.timeout || 5000
+        timeout: options.timeout || 5000,
+        timestamp: new Date().toISOString()
       });
       
       const response = await axios.get(url, {
         headers,
         timeout: 5000,
-        validateStatus: status => status < 500,
-        ...options
+        validateStatus: null // Don't throw on error status codes
       });
       
       const duration = Date.now() - startTime;
       logger.info(`API at ${url} is reachable (GET request, status: ${response.status})`, { 
         requestId, 
         duration: `${duration}ms`,
-        status: response.status
+        status: response.status,
+        timestamp: new Date().toISOString()
       });
       
       return true;
@@ -950,7 +1025,13 @@ export const isApiReachable = async (url, options = {}) => {
         requestId,
         duration: `${duration}ms`,
         error: error.message,
-        code: error.code
+        code: error.code,
+        config: error.config ? {
+          url: error.config.url,
+          method: error.config.method,
+          timeout: error.config.timeout
+        } : 'No config available',
+        timestamp: new Date().toISOString()
       });
       
       return false;
@@ -966,7 +1047,11 @@ export const isApiReachable = async (url, options = {}) => {
  */
 export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
   const diagnosisId = `diag_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-  logger.info(`Diagnosing API endpoint for ${url}`, { diagnosisId, url });
+  logger.info(`Diagnosing API endpoint for ${url}`, { 
+    diagnosisId, 
+    url,
+    timestamp: new Date().toISOString()
+  });
   
   const diagnosis = {
     url,
@@ -990,7 +1075,10 @@ export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
       diagnosis.errorDetails = 'No URL provided';
       diagnosis.recommendations.push('Provide a valid URL for diagnosis');
       
-      logger.error(`Diagnosis failed: No URL provided`, { diagnosisId });
+      logger.error(`Diagnosis failed: No URL provided`, { 
+        diagnosisId,
+        timestamp: new Date().toISOString()
+      });
       return diagnosis;
     }
     
@@ -1003,7 +1091,8 @@ export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
       
       logger.error(`Diagnosis failed: Invalid URL format - ${url}`, { 
         diagnosisId,
-        error: urlError.message
+        error: urlError.message,
+        timestamp: new Date().toISOString()
       });
       
       return diagnosis;
@@ -1025,7 +1114,8 @@ export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
       logger.debug(`Sending diagnosis request to ${url}`, {
         diagnosisId,
         method: 'GET',
-        timeout: 10000
+        timeout: 10000,
+        timestamp: new Date().toISOString()
       });
       
       const response = await axios.get(url, {
@@ -1044,7 +1134,8 @@ export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
         diagnosisId,
         status: response.status,
         contentType: diagnosis.contentType,
-        responseTime: diagnosis.responseTime
+        responseTime: diagnosis.responseTime,
+        timestamp: new Date().toISOString()
       });
       
       // Check response content type
@@ -1115,7 +1206,17 @@ export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
       logger.error(`Diagnosis request failed after ${diagnosis.responseTime}ms: ${error.message}`, {
         diagnosisId,
         error: error.message,
-        code: error.code
+        code: error.code,
+        config: error.config ? {
+          url: error.config.url,
+          method: error.config.method,
+          timeout: error.config.timeout,
+          headers: error.config.headers ? {
+            ...error.config.headers, 
+            Authorization: error.config.headers.Authorization ? '[REDACTED]' : undefined
+          } : 'No headers available'
+        } : 'No config available',
+        timestamp: new Date().toISOString()
       });
       
       if (axios.isAxiosError(error)) {
@@ -1148,7 +1249,8 @@ export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
     logger.error(`Unexpected error during API diagnosis:`, {
       diagnosisId,
       error: error.message,
-      stack: error.stack
+      stack: error.stack,
+      timestamp: new Date().toISOString()
     });
   }
   
@@ -1166,7 +1268,8 @@ export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
     isReachable: diagnosis.isReachable,
     statusCode: diagnosis.statusCode,
     responseTime: diagnosis.responseTime,
-    isOData: diagnosis.isOData || false
+    isOData: diagnosis.isOData || false,
+    timestamp: new Date().toISOString()
   });
   
   return diagnosis;
