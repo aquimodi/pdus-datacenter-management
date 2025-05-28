@@ -457,7 +457,7 @@ export const fetchExternalAPI = async (url, source, options = {}) => {
           'Accept': 'application/json',
           'X-Request-ID': requestId
         },
-        timeout: 10000, // 10 second timeout
+        timeout: 30000, // Aumentado de 10000 a 30000 (30 segundos)
         validateStatus: status => {
           // Accept 2xx status codes and a few others that might be valid in some contexts
           return status >= 200 && status < 300;
@@ -956,14 +956,14 @@ export const isApiReachable = async (url, options = {}) => {
     logger.debug(`Attempting HEAD request to ${url}`, { 
       requestId, 
       method: 'HEAD',
-      timeout: options.timeout || 5000,
+      timeout: options.timeout || 30000, // Aumentado de 5000 a 30000 (30 segundos)
       timestamp: new Date().toISOString()
     });
     
     // First try a HEAD request as it's more efficient
     const response = await axios.head(url, {
       headers,
-      timeout: 5000,
+      timeout: 30000, // Aumentado de 5000 a 30000 (30 segundos)
       validateStatus: null // Don't throw on error status codes
     });
     
@@ -1000,13 +1000,13 @@ export const isApiReachable = async (url, options = {}) => {
       logger.debug(`Attempting GET request to ${url}`, { 
         requestId, 
         method: 'GET',
-        timeout: options.timeout || 5000,
+        timeout: options.timeout || 30000, // Aumentado de 5000 a 30000 (30 segundos)
         timestamp: new Date().toISOString()
       });
       
       const response = await axios.get(url, {
         headers,
-        timeout: 5000,
+        timeout: 30000, // Aumentado de 5000 a 30000 (30 segundos)
         validateStatus: null // Don't throw on error status codes
       });
       
@@ -1114,12 +1114,12 @@ export const diagnoseApiEndpoint = async (url, includeResponseData = false) => {
       logger.debug(`Sending diagnosis request to ${url}`, {
         diagnosisId,
         method: 'GET',
-        timeout: 10000,
+        timeout: 30000, // Aumentado de 10000 a 30000 (30 segundos)
         timestamp: new Date().toISOString()
       });
       
       const response = await axios.get(url, {
-        timeout: 10000,
+        timeout: 30000, // Aumentado de 10000 a 30000 (30 segundos)
         headers,
         validateStatus: () => true // Accept any status code for diagnostic purposes
       });

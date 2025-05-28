@@ -50,7 +50,7 @@ export async function routeRequest(request: RouteRequest) {
       url: request.destination,
       headers: augmentedHeaders,
       data: request.body,
-      timeout: 15000, // Increased timeout to 15 seconds
+      timeout: 30000, // Aumentado de 15000 a 30000 (30 segundos)
     };
 
     // Detailed logging of the request

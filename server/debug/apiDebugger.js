@@ -55,7 +55,7 @@ app.get('/test-api', async (req, res) => {
     // Make request
     const response = await axios.get(url, {
       headers,
-      timeout: 10000
+      timeout: 30000 // Aumentado de 10000 a 30000 (30 segundos)
     });
     
     // Analyze the response structure
